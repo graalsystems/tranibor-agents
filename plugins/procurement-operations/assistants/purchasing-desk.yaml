@@ -19,7 +19,7 @@ tools:
     access: read
     identity: service
     required: true
-    satisfied_by: { server: "plugin:procurement/purchasing" }
+    satisfied_by: { server: "plugin:procurement-operations/purchasing" }
 knowledge:
   # The organisation's own purchasing policy, bound to the base it already keeps (ADR 0159): nothing is copied.
   - name: purchasing_policy

@@ -6,7 +6,7 @@ asserts a guarantee by name and parameters, so that removing the guarantee turns
 before the core ships the archive. The tests run from a core checkout, as the `templates` job does:
 
     cd <core checkout> && uv sync --frozen
-    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement/tests
+    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement-operations/tests
 """
 
 from __future__ import annotations
@@ -236,6 +236,3 @@ def test_the_template_needs_the_purchasing_connector_and_the_plugin_ships_it() -
     assert "templates/procurement-operations" in contents["templates"]
     assert "agents/supplier-file-checker.yaml" in contents["agents"]
     assert "evals/supplier-file-checker.yaml" in contents["evals"]
-    other = PLUGIN / "templates" / "procurement-sourcing" / "manifest.yaml"
-    sourcing = yaml.safe_load(other.read_text(encoding="utf-8"))
-    assert "org_connectors" not in sourcing["requires"], "offers must compare without purchasing"

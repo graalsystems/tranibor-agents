@@ -6,7 +6,7 @@ name and parameters, or plays the real gate on a memo, so that removing a guaran
 red before the core ships the archive. The tests run from a core checkout, as the `templates` job does:
 
     cd <core checkout> && uv sync --frozen
-    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement/tests
+    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement-operations/tests
 """
 
 from __future__ import annotations
@@ -141,9 +141,7 @@ def test_nothing_due_is_reached_only_on_a_measured_count_below_one() -> None:
     assert "nothing_due" in terminal
     into_nothing = [t.id for t in _campaign().transitions if t.to == "nothing_due"]
     assert into_nothing == [], "it is an escalation, never a transition anyone can choose"
-    escalating = [
-        t.id for t in _campaign().transitions if t.on_fail and t.on_fail.escalate_to == "nothing_due"
-    ]
+    escalating = [t.id for t in _campaign().transitions if t.on_fail and t.on_fail.escalate_to == "nothing_due"]
     assert escalating == ["t-measure"]
 
 
@@ -218,9 +216,7 @@ def _memo_context(memo: str, contract_id: str = "CT-0101") -> Any:
         }
     }
     return GateContext(
-        result=StageResult(
-            status=StageStatus.DONE, summary="memo", outputs=StageOutputs(renewal_memo_markdown=memo)
-        ),
+        result=StageResult(status=StageStatus.DONE, summary="memo", outputs=StageOutputs(renewal_memo_markdown=memo)),
         fields={"contract_id": contract_id},
         parent_documents=parent,
     )
@@ -238,8 +234,7 @@ def _refused(memo: str, contract_id: str = "CT-0101") -> dict[str, str]:
 
 
 GOOD = "\n\n".join(
-    f"## {s}\n\nText. " + ("Value 48000.00 EUR, ends 2026-12-31." if s == "Contract" else "")
-    for s in SECTIONS
+    f"## {s}\n\nText. " + ("Value 48000.00 EUR, ends 2026-12-31." if s == "Contract" else "") for s in SECTIONS
 )
 
 
@@ -273,10 +268,7 @@ def test_a_memo_with_no_parent_is_refused_so_a_hand_made_work_item_cannot_quote_
 
 def test_the_decision_is_an_attested_task_of_the_buyers_with_three_outcomes() -> None:
     transition = _transition(_memo(), "t-decide")
-    assert (
-        _memo().actors[transition.by].type.value == "human"
-        and _memo().actors[transition.by].group == "buyers"
-    )
+    assert _memo().actors[transition.by].type.value == "human" and _memo().actors[transition.by].group == "buyers"
     assert transition.task.attest and transition.task.attest.strip()
     form = transition.task.form
     assert form["required"] == ["decision", "rationale"]
@@ -306,9 +298,7 @@ def test_the_only_action_is_add_contract_note_and_it_is_approved_under_step_up()
 
 
 def test_the_note_names_the_decision_and_the_persons_rationale_and_nothing_an_agent_wrote() -> None:
-    action = _raw(MEMO_FILE)["transitions"][
-        [t["id"] for t in _raw(MEMO_FILE)["transitions"]].index("t-record")
-    ]
+    action = _raw(MEMO_FILE)["transitions"][[t["id"] for t in _raw(MEMO_FILE)["transitions"]].index("t-record")]
     text = action["action"]["params"]["text"]
     assert "{{ fields.decision }}" in text and "{{ fields.rationale }}" in text
     assert "memo" not in text.lower() and "outputs" not in text and "documents" not in text

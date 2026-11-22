@@ -2,9 +2,9 @@
 """The plugin's matrix cases (`contents.matrix_cases`, core #1372) played as the core's scripted eval
 matrix plays them, against this server in-process on its fake, and judged by the core's case judge.
 
-The matrix names a case `plugin:procurement/<file stem>` and finds it in the offline plugins
+The matrix names a case `plugin:procurement-operations/<file stem>` and finds it in the offline plugins
 (`CHOREGOS_PLUGINS_OFFLINE`, here this repository's `plugins/`): what `plugin.yaml` declares is what it
-plays. The case's connector `plugin:procurement/purchasing` is this server, which the core reaches as the
+plays. The case's connector `plugin:procurement-operations/purchasing` is this server, which the core reaches as the
 broker does, over MCP with the platform's bearer token, on the fake registered for it in the process
 (`tranibor_adapters.fakes.plugin_servers.use_fake_plugin_server`). Registered here: the server's own app
 (`build_app`) started as the platform starts its eval instance, with the variables of its `fake`
@@ -60,7 +60,7 @@ CALLS = {
     RENEWAL: ["purchasing__get_contract"],
 }
 #: This case's connector: this plugin's server, as the matrix names it.
-SERVER = "plugin:procurement/purchasing"
+SERVER = "plugin:procurement-operations/purchasing"
 WRITES = ["create_supplier", "update_supplier", "archive_supplier", "add_contract_note"]
 WRITES += ["create_purchase_request", "cancel_purchase_request"]
 
@@ -115,7 +115,7 @@ def offline_plugins(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 async def purchasing() -> AsyncIterator[list[OnItsFake]]:
-    """This server registered as the fake of `procurement/purchasing`, a fresh one per case played, each
+    """This server registered as the fake of `procurement-operations/purchasing`, a fresh one per case played, each
     started with its `fake` variables, the scene the case asks for and the platform's token, as the
     platform starts its eval instance."""
     declaration = offline.catalogue().server(SERVER)
@@ -133,16 +133,16 @@ async def purchasing() -> AsyncIterator[list[OnItsFake]]:
         started.append(OnItsFake(build_app(Settings.from_env(environment))))
         return started[-1]
 
-    plugin_servers.use_fake_plugin_server("procurement", "purchasing", factory)
+    plugin_servers.use_fake_plugin_server("procurement-operations", "purchasing", factory)
     yield started
-    plugin_servers.use_fake_plugin_server("procurement", "purchasing", None)
+    plugin_servers.use_fake_plugin_server("procurement-operations", "purchasing", None)
     for server in started:
         await server.close()
 
 
 def load(name: str) -> dict[str, Any]:
-    """The case as the scripted matrix loads it: `plugin:procurement/<name>`, from the offline plugins."""
-    case: dict[str, Any] | None = evals.load_agent_case(f"plugin:procurement/{name}")
+    """The case as the scripted matrix loads it: `plugin:procurement-operations/<name>`, from the offline plugins."""
+    case: dict[str, Any] | None = evals.load_agent_case(f"plugin:procurement-operations/{name}")
     assert case is not None, f"plugin.yaml declares evals/matrix/{name}.yaml in `contents.matrix_cases`"
     return case
 
@@ -173,8 +173,10 @@ def answered(case: dict[str, Any], **changes: str) -> str:
 
 def test_the_matrix_finds_every_case_of_evals_matrix_and_the_server_s_fake() -> None:
     view = offline.catalogue()
-    assert "procurement" in view.plugins, "the plugin loads (`tranibor plugin validate plugins/procurement`)"
-    declared = sorted(c.name for c in view.matrix_cases if c.plugin == "procurement")
+    assert "procurement-operations" in view.plugins, (
+        "the plugin loads (`tranibor plugin validate plugins/procurement-operations`)"
+    )
+    declared = sorted(c.name for c in view.matrix_cases if c.plugin == "procurement-operations")
     assert declared == sorted(p.stem for p in (PLUGIN / "evals" / "matrix").glob("*.yaml")) == sorted(CASES)
     server = view.server(SERVER)
     assert server is not None
@@ -185,7 +187,7 @@ def test_the_matrix_finds_every_case_of_evals_matrix_and_the_server_s_fake() -> 
 def test_a_case_is_in_the_core_s_format_and_names_the_plugin_s_agent_and_tools(name: str) -> None:
     case = load(name)
     agent = agent_of(CASES[name])
-    assert (case["name"], case["plugin"], case["agent"]) == (name, "procurement", agent["slug"])
+    assert (case["name"], case["plugin"], case["agent"]) == (name, "procurement-operations", agent["slug"])
     assert case["connectors"] == {"purchasing": {"kind": SERVER, "scene": SCENES[name]}}
     assert set(case["tools_cells"]) == set(agents.TOOLS_CELLS)
     assert set(case["scripted_usage"]) == set(case["tools_cells"])

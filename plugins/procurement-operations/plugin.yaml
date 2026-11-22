@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# The procurement-operations plugin (core ADR 0202): a purchasing department's governed writes, over the MCP
+# server `purchasing`. Split out of `procurement` 0.2.1 (core finding graalsystems/tranibor#2134): a plugin that
+# brings a server cannot be installed where no plugin server runs (the local `docker compose` install), and the
+# comparison of offers needs none, so it stays in `procurement` 0.3.0.
+#
+# The version CONTINUES `procurement`'s numbering (0.2.0 and 0.2.1 published the server image
+# `purchasing-mcp:<plugin version>`), so the next tag, 0.3.0, keeps increasing. Do not reset it to 0.1.0.
+#
+# What it holds is what `procurement` 0.2.0 and 0.2.1 added: the MCP server `purchasing` (a fixed profile of
+# eleven operations, served by Odoo 19 and 20 and by a seeded fake) and the procedure that connects it; the
+# agents `supplier-file-checker`, `request-qualifier`, `renewal-analyst` and `purchasing-desk`; the assistant
+# `purchasing-desk`; the template `procurement-operations`, whose workflows onboard a supplier, qualify a
+# purchase request and run a renewal campaign (the first governed writes). It needs nothing of `procurement`
+# (no agent, skill or template of it is referenced), hence no `requires.plugins`.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: procurement-operations
+  version: 0.3.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    A purchasing department's governed writes, over one MCP server (a fake backend and Odoo): supplier
+    onboarding approved by two people, purchase requests qualified against the framework agreements, contract
+    renewal campaigns, and an assistant that files a purchase request from a conversation.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  core: ">=0.28.1,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/supplier-file-checker.yaml, agents/request-qualifier.yaml, agents/renewal-analyst.yaml, agents/purchasing-desk.yaml]
+  templates: [templates/procurement-operations]
+  evals: [evals/supplier-file-checker.yaml, evals/request-qualifier.yaml, evals/renewal-analyst.yaml, evals/purchasing-desk.yaml]
+  assistants: [assistants/purchasing-desk.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/purchasing.yaml]
+  # Cases of the core's eval matrix (its agent-case format), named `plugin:procurement-operations/<file stem>`: the
+  # matrix plays them against the server's fake; the installer keeps them and never plays them.
+  matrix_cases:
+    - evals/matrix/request-agreement-serves-need.yaml
+    - evals/matrix/request-no-agreement-serves-need.yaml
+    - evals/matrix/renewal-memo-reads-the-contract.yaml

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# The purchasing MCP server. Build context: plugins/procurement/server.
+# The purchasing MCP server. Build context: plugins/procurement-operations/server.
 # CI builds, signs (cosign) and publishes it; servers/purchasing.yaml pins it by digest.
 
 FROM python:3.12-slim AS build

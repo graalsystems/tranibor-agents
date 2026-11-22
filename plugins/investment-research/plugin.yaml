@@ -5,14 +5,14 @@
 # the procedures of the `marketdata` connector types. The CODE half stays in the core repository: the
 # extension `tranibor-investment-research`, which ships the `marketdata` connector family and is
 # installed in the platform's published API and worker images, and the `investment-research` job image,
-# built by the core's release, which runs `choregos-quant`. The plugin format has no field naming an
-# extension or a job image; the template's job steps name the image (`image: investment-research`) and
-# the operator maps it (README.md).
+# built by the core's release, which runs `choregos-quant`. The plugin names the extension it needs
+# (`requires.extensions`, from core 0.28.1); the format has no field naming a job image: the template's job
+# steps name the image (`image: investment-research`) and the operator maps it (README.md).
 apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: investment-research
-  version: 0.1.1
+  version: 0.1.2
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-
@@ -22,12 +22,15 @@ metadata:
     person decides. A research note for internal use, never an order. Ships the template and the
     procedures of the market data connector types.
   homepage: https://github.com/graalsystems/tranibor-agents
-  # The core release that dev and prod run when the template left the core. The format needs no more:
-  # `choregos plugin validate` also accepts this plugin at ci.yml's CHOREGOS_REF (released as 0.25.1).
-  core: ">=0.27.14,<1.0.0"
+  # 0.1.2: names its extension (`requires.extensions`), a field the core knows from 0.28.1; an older core
+  # refuses it, so it keeps 0.1.1.
+  core: ">=0.28.1,<1.0.0"
 requires:
   plugins: []
   connectors: {}
+  # The extension that ships the `marketdata` connector family: the `choregos.plugins` entry point of the
+  # core's `tranibor-investment-research` wheel.
+  extensions: [investment-research]
   # The organisation connector the template's snapshot job calls, by name, and its capability (as the
   # template declares it); its connector types come from the extension `tranibor-investment-research`.
   org_connectors:

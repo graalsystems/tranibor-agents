@@ -12,8 +12,9 @@ env:
   # The core whose validator, packer, eval matrix and publication library every job runs: the commit of
   # the graalsystems/tranibor v0.28.1 tag (the release that ships ADRs 0196-0202: what access-requests
   # 0.2.0 and microsoft-365-desk 0.1.0 need, and procurement's attachments, output_sections and job
-  # commands). publish.yml pins the same commit.
-  CHOREGOS_REF: 3d0944a91200a908f2a9950300761181dbb1ebea
+  # commands; and ADR 0181's `requires.extensions`, which software-delivery 1.3.0 and
+  # investment-research 0.1.2 declare). publish.yml pins the same commit.
+  CHOREGOS_REF: 4665b6189c1243b612a55ada7b0581defb69f85a
 
 jobs:
   servers:

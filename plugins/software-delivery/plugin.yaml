@@ -6,7 +6,7 @@ apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: software-delivery
-  version: 1.2.2
+  version: 1.3.0
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-
@@ -28,10 +28,15 @@ metadata:
   # `safe-rollout`, `primary-sources`) join `madr-4`; `architect` declares `web: [fetch]` for primary sources; the agents
   # that apply an organisation's conventions say to read the knowledge bases under `.choregos/knowledge/`.
   # Needs the skills the 1.1.x agents did not name, so the agents it changes are offered as a new version.
-  core: ">=0.25.1,<1.0.0"
+  # 1.3.0: names the extension it needs (ADR 0181, core 0.28.1): `software-delivery`, the `choregos.plugins`
+  # entry point of the core's `tranibor-software-delivery` wheel, which carries the release train, the
+  # SCM/CI/CD connectors and the delivery workflows since round D. A deployment without it refuses the plugin,
+  # naming it; an older core refuses the unknown field, so it keeps 1.2.2.
+  core: ">=0.28.1,<1.0.0"
 requires:
   plugins: []
   connectors: {}
+  extensions: [software-delivery]
 contents:
   agents:
     - agents/architect.yaml

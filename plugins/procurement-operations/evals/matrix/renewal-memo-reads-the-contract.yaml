@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # A case of the core's eval matrix, in the core's agent-case format, declared in plugin.yaml's
-# `contents.matrix_cases`: the matrix names it `plugin:procurement/renewal-memo-reads-the-contract` and plays it
+# `contents.matrix_cases`: the matrix names it `plugin:procurement-operations/renewal-memo-reads-the-contract` and plays it
 # against the purchasing server's fake (scene `expiring-contracts`); the installer never does. The companies and
 # numbers are invented (server/src/tranibor_purchasing/backends/fake.py). server/tests/test_matrix_cases.py plays
 # it here as the matrix does and judges it with the core's judge.
@@ -17,7 +17,7 @@ task: >
   "currency": "EUR", "value": "36000.00", "note_count": 0}.
 tools_cells: [mcp, scripts]
 connectors:
-  purchasing: { kind: "plugin:procurement/purchasing", scene: expiring-contracts }
+  purchasing: { kind: "plugin:procurement-operations/purchasing", scene: expiring-contracts }
 policy: { writes: approval }
 evidence:
   - { tool: purchasing__get_contract, arguments: { contract_id: CT-0004 } }

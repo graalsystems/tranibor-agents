@@ -4,7 +4,7 @@ One workflow, `supplier-onboarding`, for a purchasing team that wants a supplier
 person reviewed a file whose completeness a job measured, and after two people approved the write.
 
 It needs the organisation connector `purchasing` (the plugin's MCP server, installed with the plugin). The
-comparison of offers, `procurement-sourcing`, does not: it stays usable without it.
+comparison of offers lives in the plugin `procurement`, which needs no server.
 
 The work item takes one to ten files (`pdf`, `docx`) and four fields: `legal_name`, `registration_number`,
 `country` (two letters) and `category` (lower-case words joined by hyphens), all required.

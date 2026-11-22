@@ -9,7 +9,7 @@ removing a guarantee turns this repository's CI red before the core ships the ar
 core checkout, as the `templates` job does:
 
     cd <core checkout> && uv sync --frozen
-    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement/tests
+    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement-operations/tests
 """
 
 from __future__ import annotations

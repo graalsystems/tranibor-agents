@@ -7,7 +7,7 @@ guarantee, so that removing it turns this repository's CI red. The tests run fro
 `templates` job does:
 
     cd <core checkout> && uv sync --frozen
-    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement/tests
+    uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/procurement-operations/tests
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def test_the_plugin_loads_with_the_assistant() -> None:
     plugin = load_directory(PLUGIN)
     assert "purchasing-desk" in plugin.assistants
     assert "assistants/purchasing-desk.yaml" in plugin.files
-    assert plugin.version == "0.2.1"
+    assert plugin.version == "0.3.0"
 
 
 def test_the_assistant_is_refused_when_its_agent_does_not_converse(tmp_path: Path) -> None:
@@ -61,7 +61,7 @@ def test_the_assistant_is_refused_when_its_agent_does_not_converse(tmp_path: Pat
 
     from tranibor_core.plugins import PluginError, load_directory
 
-    copy = tmp_path / "procurement"
+    copy = tmp_path / "procurement-operations"
     shutil.copytree(PLUGIN, copy, ignore=shutil.ignore_patterns("server", "tests", "__pycache__"))
     agent = _yaml(copy / "agents" / "purchasing-desk.yaml")
     del agent["agent"]["spec"]["runtime"]

@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import parse_qs
 
 import pytest
 
 from choregos_m365_desk.app import Runtime, build_server
-from choregos_m365_desk.config import Settings
+from choregos_m365_desk.config import BOT_SCOPE, FAKE_TENANT_ID, Settings
 from choregos_m365_desk.fake import (
     CONVERSATION_ID,
     MAIL_PLAIN,
@@ -177,6 +178,33 @@ async def test_a_teams_reply_goes_to_the_thread_escaped(mcp: Mcp, fake: FakeMicr
         f"Fixed &lt;script&gt;x&lt;/script&gt; &amp; &quot;done&quot;<br>Bye<br><br>Ref: {reference('t1')}"
     )
     assert posted["id"] == reference("t1")
+
+
+@pytest.mark.parametrize(
+    ("bot_tenant_id", "token_tenant"),
+    [
+        pytest.param(None, FAKE_TENANT_ID, id="empty: a single-tenant bot, its token from tenant_id"),
+        pytest.param("botframework.com", "botframework.com", id="botframework.com: a multi-tenant bot"),
+    ],
+)
+async def test_the_bots_token_comes_from_the_bots_tenant(
+    fake: FakeMicrosoft, bot_tenant_id: str | None, token_tenant: str
+) -> None:
+    """A single-tenant bot (Azure Bot's default type) gets its Bot Connector token from `tenant_id` when
+    `bot_tenant_id` is empty; a multi-tenant bot, from `botframework.com` said explicitly. The delivery
+    is verified the same way for both (the Bot Connector's issuer and keys)."""
+    settings = Settings.from_env({"M365_DESK_FAKE": "1"}).model_copy(update={"bot_tenant_id": bot_tenant_id})
+    desk = Mcp(build_server(Runtime(settings, fake=fake, sleep=no_sleep)))
+    headers = {"Authorization": f"Bearer {fake.issuer.mint()}"}
+    assert (await desk.call("tracker_parse_event", headers=headers, body=json.dumps(activity())))["verified"] is True
+    assert (await desk.call("reply", key=ROOT, work_item_key=ROOT, text="Hi.", action_key="t1"))["sent"] is True
+    asked = [
+        r.url.path.split("/")[1]
+        for r in fake.requests
+        if r.url.host == "login.microsoftonline.com" and parse_qs(r.content.decode()).get("scope") == [BOT_SCOPE]
+    ]
+    assert asked == [token_tenant]
+    assert len(fake.connector_replies) == 1
 
 
 async def test_a_teams_reply_is_sent_once_per_action_even_after_a_restart(mcp: Mcp, fake: FakeMicrosoft) -> None:

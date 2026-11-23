@@ -7,7 +7,7 @@ person decides on each product and on the campaign. A research note for internal
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `investment-research` 0.1.2, core `>=0.28.1,<1.0.0`, `requires.extensions: [investment-research]` |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `investment-research` 0.1.3, core `>=0.28.1,<1.0.0`, `requires.extensions: [investment-research]` |
 | Template | [`templates/investment-research`](templates/investment-research/README.md) | 0.2.0: the `campaign` and `product-memo` workflows, the agents `quant-strategist` and `quant-analyst`, the skills `strategy-grammar` and `reading-metrics`, its eval cases |
 | Procedures | [`procedures/`](procedures) | the `marketdata` connector types: `stooq`, `yahoo`, `alphavantage`, `tiingo`, `composite` |
 
@@ -47,5 +47,5 @@ marketdata}`), which the installer does not enforce.
 
 ```sh
 tranibor plugin validate plugins/investment-research
-tranibor plugin pack plugins/investment-research -o investment-research-0.1.2.tar.gz   # same bytes every time
+tranibor plugin pack plugins/investment-research -o investment-research-0.1.3.tar.gz   # same bytes every time
 ```

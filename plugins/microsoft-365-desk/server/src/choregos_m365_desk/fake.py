@@ -35,7 +35,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from .config import (
     BOT_ISSUER,
     BOT_SCOPE,
-    BOT_TENANT_DEFAULT,
+    BOT_TENANT_MULTI,
     FAKE_CHANNEL_ID,
     FAKE_CLIENT_ID,
     FAKE_CLIENT_SECRET,
@@ -337,7 +337,7 @@ class FakeMicrosoft:
         scope = form.get("scope")
         if scope == GRAPH_SCOPE and tenant == FAKE_TENANT_ID:
             token = f"graph-{next(self._ids)}"
-        elif scope == BOT_SCOPE and tenant in (BOT_TENANT_DEFAULT, FAKE_TENANT_ID):
+        elif scope == BOT_SCOPE and tenant in (BOT_TENANT_MULTI, FAKE_TENANT_ID):
             token = f"bot-{next(self._ids)}"
         else:
             return httpx.Response(400, json={"error": "invalid_scope"})

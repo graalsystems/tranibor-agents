@@ -96,7 +96,7 @@ class Tokens:
 
     async def bot(self, *, renew: bool = False) -> str:
         s = self.settings
-        return await self.token(s.bot_tenant_id, s.bot_id, BOT_SCOPE, renew=renew)
+        return await self.token(s.bot_token_tenant, s.bot_id, BOT_SCOPE, renew=renew)
 
 
 class Graph:

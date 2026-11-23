@@ -1,6 +1,6 @@
 [project]
 name = "choregos-m365-desk"
-version = "0.1.0"
+version = "0.1.1"
 description = "MCP server: a Microsoft 365 shared mailbox and a Teams channel as a Tranibor tracker."
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"

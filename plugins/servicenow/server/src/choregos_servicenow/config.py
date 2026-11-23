@@ -38,6 +38,9 @@ class Settings(BaseModel):
     #: The assignment queue polled by `tracker_list_candidates`: group names or sys_ids.
     assignment_groups: tuple[str, ...] = ()
     fake: bool = False
+    #: `SERVICENOW_FAKE_SEED=<path>`: a JSON file the fake instance is seeded from (`seed_file.py`), in place of
+    #: its built-in seed. Fake mode only; never a configuration field of the server's descriptor.
+    fake_seed: str | None = None
     port: int = 8080
     #: The bearer token the platform presents on every call but the health probe (ADR 0094).
     server_token: SecretStr | None = None
@@ -85,6 +88,7 @@ class Settings(BaseModel):
                 webhook_secret=SecretStr(source.get("SERVICENOW_WEBHOOK_SECRET") or FAKE_WEBHOOK_SECRET),
                 assignment_groups=groups or ("Service Desk",),
                 fake=True,
+                fake_seed=source.get("SERVICENOW_FAKE_SEED") or None,
                 port=port,
                 server_token=server_token,
                 insecure_dev=insecure_dev,

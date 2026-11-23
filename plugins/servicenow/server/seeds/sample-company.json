@@ -1,0 +1,76 @@
+{
+  "users": [
+    {"user_name": "ada.reyes", "name": "Ada Reyes"},
+    {"user_name": "ben.okafor", "name": "Ben Okafor"},
+    {"user_name": "carla.nguyen", "name": "Carla Nguyen (CFO)", "vip": true},
+    {"user_name": "dev.patel", "name": "Dev Patel"},
+    {"user_name": "erin.walsh", "name": "Erin Walsh"}
+  ],
+  "groups": [
+    {"name": "Service Desk", "description": "First line", "manager": "erin.walsh"},
+    {"name": "Network", "description": "Network and VPN", "manager": "ben.okafor"},
+    {"name": "Applications", "description": "Business applications and their databases", "manager": "dev.patel"}
+  ],
+  "cis": [
+    {"name": "mail-01", "class": "cmdb_ci_email_server", "group": "Service Desk", "description": "Mail server"},
+    {"name": "vpn-hq-01", "class": "cmdb_ci_netgear", "group": "Network", "description": "VPN gateway, head office"},
+    {"name": "vpn-branch-01", "class": "cmdb_ci_netgear", "group": "Network", "description": "VPN concentrator, branch office"},
+    {"name": "erp-app", "class": "cmdb_ci_appl", "group": "Applications", "description": "ERP application"},
+    {"name": "erp-db", "class": "cmdb_ci_db_instance", "group": "Applications", "description": "ERP database"}
+  ],
+  "ci_relations": [
+    {"parent": "erp-app", "child": "erp-db", "type": "Depends on::Used by"},
+    {"parent": "vpn-branch-01", "child": "vpn-hq-01", "type": "Connected by::Connects"}
+  ],
+  "knowledge": [
+    {"number": "KB0020001", "title": "Mobile mail stops syncing after a password change",
+     "text": "Remove the mail account from the phone and add it again with the new password.", "state": "published"},
+    {"number": "KB0020002", "title": "VPN drops at the branch office: check the MTU on the concentrator",
+     "text": "Symptom: VPN tunnels of the branch office drop and come back on their own; large transfers fail first. Cause: packets over 1400 bytes are fragmented between the branch and its concentrator, vpn-branch-01. Fix: set the MTU to 1400 on the concentrator. A firmware upgrade resets it to 1500: check it after each upgrade.", "state": "published"},
+    {"number": "KB0020003", "title": "ERP reports are slow at month end",
+     "text": "Month-end batch jobs load erp-db. Run reports outside 08:00-10:00.", "state": "published"},
+    {"number": "KB0020004", "title": "VPN client reinstall (draft)", "text": "Draft procedure, not reviewed.", "state": "draft"}
+  ],
+  "incidents": [
+    {"number": "INC0020001", "title": "Email not syncing on my phone",
+     "description": "Since this morning my mobile mail app does not receive new emails. Desktop mail works.",
+     "state": "1", "group": "Service Desk", "caller": "ada.reyes", "ci": "mail-01", "category": "software",
+     "created_days_ago": 0.5},
+    {"number": "INC0020002", "title": "Phone mail stopped syncing",
+     "description": "My phone stopped getting new email today; mail on the PC is fine.",
+     "state": "1", "group": "Service Desk", "caller": "dev.patel", "ci": "mail-01", "category": "software",
+     "created_days_ago": 0.4},
+    {"number": "INC0020003", "title": "It does not work", "description": "Please fix it asap.",
+     "state": "1", "group": "Service Desk", "caller": "ada.reyes", "created_days_ago": 0.3},
+    {"number": "INC0020004", "title": "Cannot open the ERP to approve payments",
+     "description": "I must approve the supplier payments today and the application shows an error 500.",
+     "state": "1", "impact": "2", "urgency": "1", "group": "Service Desk", "caller": "carla.nguyen",
+     "ci": "erp-app", "category": "software", "created_days_ago": 0.2},
+    {"number": "INC0020005", "title": "VPN drops every 10 minutes at the branch office",
+     "description": "Since Monday the staff of the branch office lose the VPN about every ten minutes; the tunnel comes back by itself. Large transfers fail first.",
+     "state": "2", "impact": "2", "urgency": "2", "group": "Network", "caller": "dev.patel", "ci": "vpn-branch-01",
+     "category": "network", "created_days_ago": 0.4,
+     "journal": [
+       {"element": "work_notes", "value": "Planned maintenance last weekend: the concentrator's firmware was upgraded.",
+        "days_ago": 0.3, "author": "ben.okafor"}
+     ]},
+    {"number": "INC0020006", "title": "Branch office: VPN drops during large file transfers",
+     "description": "Copies to the head-office share fail half-way and the tunnel reconnects by itself.",
+     "state": "7", "group": "Network", "caller": "erin.walsh", "ci": "vpn-branch-01", "category": "network",
+     "created_days_ago": 66, "resolved_days_ago": 61,
+     "close_notes": "MTU lowered to 1400 on the branch concentrator (KB0020002).",
+     "journal": [
+       {"element": "work_notes", "value": "Packet capture on vpn-branch-01: packets over 1400 bytes are fragmented and dropped.",
+        "days_ago": 63, "author": "ben.okafor"}
+     ]},
+    {"number": "INC0020007", "title": "Mobile mail sync failure after a password change",
+     "description": "Phones stopped syncing mail after the password change.",
+     "state": "6", "group": "Service Desk", "caller": "erin.walsh", "ci": "mail-01", "category": "software",
+     "created_days_ago": 12, "resolved_days_ago": 10,
+     "close_notes": "The user added the account again after the password change (KB0020001)."},
+    {"number": "INC0020008", "title": "ERP report takes 20 minutes",
+     "description": "The month-end report is very slow.",
+     "state": "2", "group": "Applications", "caller": "carla.nguyen", "ci": "erp-db", "category": "database",
+     "created_days_ago": 3}
+  ]
+}

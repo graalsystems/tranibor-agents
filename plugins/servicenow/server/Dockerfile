@@ -14,6 +14,8 @@ RUN uv sync --frozen --no-dev --no-editable
 FROM python:3.12-slim
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PORT=8080
 COPY --from=build /app/.venv /app/.venv
+# Sample seeds for the fake instance: SERVICENOW_FAKE_SEED=/app/seeds/sample-company.json (a mounted file works too).
+COPY seeds /app/seeds
 # A numeric non-root user, so the platform's `runAsNonRoot` can check it without a passwd entry.
 USER 65532:65532
 EXPOSE 8080

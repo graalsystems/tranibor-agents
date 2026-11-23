@@ -82,13 +82,22 @@ _BANK_NAME = re.compile(
 _IBAN_SHAPE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{2}\d{2}(?:[ -]?[A-Za-z0-9]){11,30}(?![A-Za-z0-9])")
 
 
+# The platform's idempotency key: an opaque hash the platform fills (24 hexadecimal characters), never a
+# text a person or an agent wrote. One key in eighteen starts with two letters and two digits and is
+# IBAN-shaped, so its value is not read for one; its name still is (the night of 2026-11-23 refused one).
+OPAQUE_ARGUMENTS = frozenset({"action_key"})
+
+
 def refuse_bank_details(value: Any, where: str = "arguments") -> None:
     """Refuse a call that carries a bank detail: an argument or field named like one, or a text shaped like
-    an IBAN. Payment data is a human process (core ADR 0202); the profile neither takes nor returns it."""
+    an IBAN. Payment data is a human process (core ADR 0202); the profile neither takes nor returns it.
+    The value of a top-level opaque argument (`OPAQUE_ARGUMENTS`) is not read for an IBAN shape."""
     if isinstance(value, dict):
         for key, item in value.items():
             if _BANK_NAME.search(str(key)):
                 raise Refused(f"{where}: `{key}` is a bank detail; the profile never takes or returns payment data")
+            if where == "arguments" and key in OPAQUE_ARGUMENTS:
+                continue
             refuse_bank_details(item, f"{where}.{key}")
     elif isinstance(value, list | tuple):
         for index, item in enumerate(value):

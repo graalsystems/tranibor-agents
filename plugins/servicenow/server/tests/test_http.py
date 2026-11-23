@@ -25,7 +25,7 @@ MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-ve
 
 @pytest.fixture
 def http() -> Iterator[TestClient]:
-    env = {"SERVICENOW_FAKE": "1", "SERVICENOW_WEBHOOK_SECRET": SECRET, "CHOREGOS_SERVER_TOKEN": TOKEN}
+    env = {"SERVICENOW_FAKE": "1", "SERVICENOW_WEBHOOK_SECRET": SECRET, "TRANIBOR_SERVER_TOKEN": TOKEN}
     with TestClient(build_app(Settings.from_env(env)), base_url=BASE, headers=BEARER) as client:
         yield client
 
@@ -46,7 +46,7 @@ def test_healthz(http: TestClient) -> None:
     assert http.get("/healthz", headers={"Authorization": ""}).json() == {
         "status": "ok",
         "fake": True,
-        "version": "0.1.4",
+        "version": "0.1.5",
     }
 
 
@@ -76,24 +76,44 @@ def test_events_need_the_platform_token_as_well_as_the_secret(http: TestClient) 
 def test_the_server_refuses_to_start_without_a_token() -> None:
     for env in (
         {"SERVICENOW_FAKE": "1"},
-        {"SERVICENOW_FAKE": "1", "CHOREGOS_SERVER_TOKEN": ""},
-        {"SERVICENOW_FAKE": "1", "CHOREGOS_SERVER_INSECURE_DEV": "true"},
+        {"SERVICENOW_FAKE": "1", "TRANIBOR_SERVER_TOKEN": ""},
+        {"SERVICENOW_FAKE": "1", "TRANIBOR_SERVER_TOKEN": "", "CHOREGOS_SERVER_TOKEN": ""},
+        {"SERVICENOW_FAKE": "1", "TRANIBOR_SERVER_INSECURE_DEV": "true"},
         {
             "SERVICENOW_BASE_URL": "https://x.service-now.com",
             "SERVICENOW_AUTH": "basic",
             "SERVICENOW_USERNAME": "u",
             "SERVICENOW_PASSWORD": "p",
-            "CHOREGOS_SERVER_INSECURE_DEV": "1",
+            "TRANIBOR_SERVER_INSECURE_DEV": "1",
         },
     ):
-        with pytest.raises(ValueError, match="CHOREGOS_SERVER_TOKEN"):
+        with pytest.raises(ValueError, match="TRANIBOR_SERVER_TOKEN"):
             build_app(Settings.from_env(env))
 
 
-def test_insecure_dev_runs_the_fake_without_a_token() -> None:
-    settings = Settings.from_env({"SERVICENOW_FAKE": "1", "CHOREGOS_SERVER_INSECURE_DEV": "1"})
+@pytest.mark.parametrize("variable", ["TRANIBOR_SERVER_INSECURE_DEV", "CHOREGOS_SERVER_INSECURE_DEV"])
+def test_insecure_dev_runs_the_fake_without_a_token(variable: str) -> None:
+    settings = Settings.from_env({"SERVICENOW_FAKE": "1", variable: "1"})
     with TestClient(build_app(settings), base_url=BASE) as client:
         assert _tools_list(client, {}) == 200
+
+
+@pytest.mark.parametrize("variable", ["TRANIBOR_SERVER_TOKEN", "CHOREGOS_SERVER_TOKEN"])
+def test_the_token_comes_from_the_current_core_s_variable_or_an_older_core_s(variable: str) -> None:
+    """The core gives the pod `TRANIBOR_SERVER_TOKEN` since its rename (core ADR 0176); an older core,
+    `CHOREGOS_SERVER_TOKEN`. Reading only the older name, 0.2.4 refused to start on core 0.29.0 (dev,
+    2026-11-23: `CHOREGOS_SERVER_TOKEN is not set`, the pod's Secret holding `TRANIBOR_SERVER_TOKEN`)."""
+    settings = Settings.from_env({"SERVICENOW_FAKE": "1", variable: TOKEN})
+    with TestClient(build_app(settings), base_url=BASE) as client:
+        assert _tools_list(client, BEARER) == 200
+        assert _tools_list(client, {"Authorization": f"Bearer {TOKEN}x"}) == 401
+
+
+def test_the_current_core_s_variable_wins_over_an_older_core_s() -> None:
+    env = {"SERVICENOW_FAKE": "1", "TRANIBOR_SERVER_TOKEN": TOKEN, "CHOREGOS_SERVER_TOKEN": "stale"}
+    with TestClient(build_app(Settings.from_env(env)), base_url=BASE) as client:
+        assert _tools_list(client, BEARER) == 200
+        assert _tools_list(client, {"Authorization": "Bearer stale"}) == 401
 
 
 def test_mcp_over_streamable_http(http: TestClient) -> None:

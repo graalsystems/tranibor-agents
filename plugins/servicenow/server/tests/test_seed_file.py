@@ -117,7 +117,7 @@ async def test_the_sample_seed_serves_the_triage_path(tmp_path: Path) -> None:
 
 def test_the_server_starts_on_a_seed_file_and_reports_it_healthy(tmp_path: Path) -> None:
     env = {"SERVICENOW_FAKE": "1", "SERVICENOW_FAKE_SEED": str(write(tmp_path, MINIMAL)),
-           "CHOREGOS_SERVER_TOKEN": "t"}  # fmt: skip
+           "TRANIBOR_SERVER_TOKEN": "t"}  # fmt: skip
     with TestClient(build_app(Settings.from_env(env))) as client:
         assert client.get("/healthz").json()["fake"] is True
 

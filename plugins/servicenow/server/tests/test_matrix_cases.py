@@ -45,6 +45,8 @@ evals = pytest.importorskip("tranibor_orchestrator.activities.evals", reason="th
 agents = pytest.importorskip("tranibor_playbooks.evals.agents", reason="the core's case judge")
 offline = pytest.importorskip("tranibor_core.agent_catalogue", reason="the core's offline plugins")
 plugin_servers = pytest.importorskip("tranibor_adapters.fakes.plugin_servers", reason="the core's plugin fakes")
+#: The variable the core gives a server's pod its token in (`tranibor_adapters.plugin_servers.TOKEN_ENV`).
+TOKEN_ENV = pytest.importorskip("tranibor_adapters.plugin_servers", reason="the core's plugin servers").TOKEN_ENV
 
 PLUGIN = Path(__file__).resolve().parents[2]
 PLUGINS = PLUGIN.parent
@@ -106,7 +108,7 @@ async def servicenow() -> AsyncIterator[list[OnItsFake]]:
     declaration = offline.catalogue().server(SERVER)
     assert declaration is not None, "plugin.yaml ships servers/servicenow.yaml"
     assert "fake" in declaration, "servers/servicenow.yaml declares its `fake`, or no live cell plays the cases"
-    environment = {**declaration["fake"]["env"], "CHOREGOS_SERVER_TOKEN": plugin_servers.EVAL_TOKEN}
+    environment = {**declaration["fake"]["env"], TOKEN_ENV: plugin_servers.EVAL_TOKEN}
     started: list[OnItsFake] = []
 
     def factory(scene: str) -> httpx.AsyncBaseTransport:

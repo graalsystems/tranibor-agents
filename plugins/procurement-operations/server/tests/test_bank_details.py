@@ -73,6 +73,36 @@ def test_the_guard_does_not_refuse_identities_that_only_look_like_one() -> None:
     refuse_bank_details({"bicycle_rack": "2", "public": "yes", "cubic_metres": "3"})
 
 
+#: Keys the night of 2026-11-23 sent: the core's 24-hex key (`effects.py`) and a UUID with a group of two
+#: letters and two digits, both IBAN-shaped to the pattern.
+PLATFORM_KEYS = ("ab12c3d4e5f60718293a4b5c", "live-b4543ca9-40f6-439f-aa98-0c7257ec7635")
+
+
+@pytest.mark.parametrize("key", PLATFORM_KEYS)
+def test_the_platform_s_idempotency_key_is_not_read_for_an_iban(key: str) -> None:
+    from tranibor_purchasing.errors import Refused
+
+    for value in PLATFORM_KEYS:  # the shape the guard would see without the exemption
+        with pytest.raises(Refused):
+            refuse_bank_details({"text": value})
+    refuse_bank_details({"name": "Quillfeather SAS", "action_key": key})
+
+
+@pytest.mark.parametrize("key", PLATFORM_KEYS)
+async def test_a_write_with_an_iban_shaped_platform_key_is_served(key: str, mcp: Mcp) -> None:
+    created = await mcp.call("create_supplier", name="Quillfeather SAS", country="FR", action_key=key)
+    assert created["supplier_id"]
+
+
+def test_only_the_top_level_key_is_exempt_and_the_rest_is_still_read() -> None:
+    from tranibor_purchasing.errors import Refused
+
+    with pytest.raises(Refused):
+        refuse_bank_details({"action_key": "k-1", "name": "Quillfeather " + SHAPED})
+    with pytest.raises(Refused):
+        refuse_bank_details({"fields": {"action_key": SHAPED}})
+
+
 @pytest.mark.parametrize("key", ["bank_holiday", "iban_of_supplier", "Swift", "payment_instructions"])
 def test_the_guard_refuses_a_name_that_says_bank_detail(key: str) -> None:
     from tranibor_purchasing.errors import Refused

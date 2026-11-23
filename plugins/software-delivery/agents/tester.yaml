@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: verify
   summary: Runs the full checks, writes the missing tests for each acceptance criterion, never fixes application code.
   tools: ["skill:test-first", "skill:acceptance-criteria", "knowledge"]
@@ -23,7 +23,7 @@ agent:
       one; without any, follow the repository's own conventions (`AGENTS.md`, the nearest code).
 
       Write exactly this output: `{"test_report": "what you ran, what passed, what you added, what is wrong (Markdown)"}`,
-      and complete `evidence` (`tests_passed`, `tests_run`).
+      and complete `evidence` (the facts `tests_passed`, `tests_run` in `evidence.facts`).
     limits: { max_turns: 60, max_minutes: 40 }
     budget: { run_usd: 6.0 }
     skills: [{ slug: test-first }, { slug: acceptance-criteria }]

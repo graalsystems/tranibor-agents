@@ -39,4 +39,4 @@ description: How to work test first and how to judge that a test proves somethin
 - Use the repository's own framework, fixtures, markers and naming; look at the nearest existing test first.
 - No network, no wall clock, no randomness without a fake or a seed: a flaky test is a defect, not a retry.
 - Never weaken or delete an existing test to get green. If it is wrong, say why in the commit.
-- Never report a count (`tests_run`, `tests_passed`) you did not read from the runner's output.
+- Never report a count (the facts `tests_run`, `tests_passed` of `evidence.facts`) you did not read from the runner's output.

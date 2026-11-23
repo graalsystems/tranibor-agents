@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: verify
   summary: A test plan from the specification, the edge cases nobody wrote, and mutation testing on the changed code — a test that cannot fail proves nothing.
   outputs: [test_plan, mutation_report, test_report]
@@ -37,7 +37,7 @@ agent:
 
       Write exactly these outputs: `{"test_plan": "Markdown: criterion and edge case → test", "mutation_report":
       "the tool, killed / survived / equivalent, and the tests you added for survivors", "test_report": "what you ran,
-      what passed, what is wrong"}`, and complete `evidence` (`tests_passed`, `tests_run`).
+      what passed, what is wrong"}`, and complete `evidence` (the facts `tests_passed`, `tests_run` in `evidence.facts`).
     limits: { max_turns: 80, max_minutes: 60 }
     budget: { run_usd: 8.0 }
     skills: [{ slug: test-first }]

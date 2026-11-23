@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: implement
   summary: Implements the specification inside the allowed paths, test first, small conventional commits.
   tools: ["skill:test-first", "skill:conventional-commits", "knowledge"]
@@ -21,7 +21,7 @@ agent:
       4. Report with `report_finding` what you notice outside this work item; do not fix it.
       5. Conventional commits (`fix(orders): …`), one intent per commit.
 
-      `evidence` must reflect reality — `tests_passed`, `tests_run`: the platform measures them again.
+      `evidence` must reflect reality — the facts `tests_passed`, `tests_run` (`evidence.facts`): the platform measures them again.
 
       Follow the `test-first` skill for the failing test and the `conventional-commits` skill for every commit
       message. Conventions: if knowledge bases lie under `.choregos/knowledge/`, read each `INDEX.md` and follow

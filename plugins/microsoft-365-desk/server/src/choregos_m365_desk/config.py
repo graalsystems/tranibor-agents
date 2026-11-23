@@ -33,8 +33,9 @@ BOT_OPENID_URL = "https://login.botframework.com/v1/.well-known/openidconfigurat
 BOT_KEYS_HOST = "login.botframework.com"
 BOT_ISSUER = "https://api.botframework.com"
 BOT_SCOPE = "https://api.botframework.com/.default"
-#: Multi-tenant bots get their token from this tenant; single-tenant bots from their own.
-BOT_TENANT_DEFAULT = "botframework.com"
+#: A multi-tenant bot gets its token from this tenant, said explicitly; a single-tenant bot (Azure Bot's
+#: default type) from its own, the application's `tenant_id`, when `bot_tenant_id` is empty.
+BOT_TENANT_MULTI = "botframework.com"
 #: The Bot Connector hosts a reply may be sent to (the egress of `servers/desk.yaml`).
 SERVICE_HOSTS = frozenset({"smba.trafficmanager.net"})
 SERVICE_URL_DEFAULT = "https://smba.trafficmanager.net/teams/"
@@ -85,7 +86,9 @@ class Settings(BaseModel):
     #: The bot's Microsoft App ID: the audience of the tokens the Bot Connector signs. The same Entra
     #: application as `client_id` unless said otherwise; its secret is `client_secret`.
     bot_app_id: str | None = None
-    bot_tenant_id: str = BOT_TENANT_DEFAULT
+    #: Where the bot gets its token: `None` for a single-tenant bot (`tenant_id`, the Azure Bot default),
+    #: `botframework.com` for a multi-tenant one, or a single-tenant bot's tenant id said explicitly.
+    bot_tenant_id: str | None = None
     #: Where replies go when no verified activity of the conversation told the server its own.
     service_url: str = SERVICE_URL_DEFAULT
     #: The label a work item carries while nobody took it (the project's start label).
@@ -111,8 +114,11 @@ class Settings(BaseModel):
             raise ValueError("M365_DESK_MAILBOX must be the shared mailbox's address")
         if self.bot_app_id is not None and not GUID.match(self.bot_app_id):
             raise ValueError("M365_DESK_BOT_APP_ID must be the bot's Microsoft App ID (a GUID)")
-        if self.bot_tenant_id != BOT_TENANT_DEFAULT and not GUID.match(self.bot_tenant_id):
-            raise ValueError("M365_DESK_BOT_TENANT_ID is botframework.com or the single-tenant bot's tenant id")
+        if self.bot_tenant_id not in (None, BOT_TENANT_MULTI) and not GUID.match(self.bot_tenant_id):
+            raise ValueError(
+                "M365_DESK_BOT_TENANT_ID is empty (a single-tenant bot in tenant_id), botframework.com "
+                "(a multi-tenant bot) or the single-tenant bot's tenant id"
+            )
         if not allowed_service_url(self.service_url):
             raise ValueError(f"M365_DESK_SERVICE_URL must be an https URL on {', '.join(sorted(SERVICE_HOSTS))}")
         if not LABEL.match(self.start_label):
@@ -123,6 +129,11 @@ class Settings(BaseModel):
     def bot_id(self) -> str:
         """The bot's Microsoft App ID (the application's, unless configured apart)."""
         return self.bot_app_id or self.client_id
+
+    @property
+    def bot_token_tenant(self) -> str:
+        """The tenant the bot's Bot Connector token comes from: `bot_tenant_id`, else `tenant_id`."""
+        return self.bot_tenant_id or self.tenant_id
 
     def channel(self, channel_id: str) -> Channel | None:
         return next((c for c in self.teams if c.channel_id == channel_id), None)
@@ -165,7 +176,7 @@ class Settings(BaseModel):
             mailbox=source.get("M365_DESK_MAILBOX") or None,
             teams=_channels(source.get("M365_DESK_TEAMS", "")),
             bot_app_id=source.get("M365_DESK_BOT_APP_ID") or None,
-            bot_tenant_id=source.get("M365_DESK_BOT_TENANT_ID") or BOT_TENANT_DEFAULT,
+            bot_tenant_id=source.get("M365_DESK_BOT_TENANT_ID") or None,
             service_url=source.get("M365_DESK_SERVICE_URL") or SERVICE_URL_DEFAULT,
             start_label=source.get("M365_DESK_START_LABEL") or START_LABEL_DEFAULT,
             port=port,

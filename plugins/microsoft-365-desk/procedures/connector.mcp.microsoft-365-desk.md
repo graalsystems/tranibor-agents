@@ -3,8 +3,8 @@ id: connector.mcp.microsoft-365-desk
 title: Connect an IT desk's shared mailbox and Teams channel
 applies_to: {connector: mcp/microsoft-365-desk}
 audience: org_admin
-version: 1
-reviewed: 2026-11-20
+version: 2
+reviewed: 2026-11-23
 vendor_docs:
   - {title: "Register an application in Microsoft Entra ID", url: "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app"}
   - {title: "Add and manage application credentials", url: "https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials"}
@@ -25,7 +25,7 @@ fields:
   mailbox: "the shared mailbox's address, e.g. it-desk@contoso.com; leave empty for Teams only"
   teams: "the channels the bot answers in, each {team_id, channel_id}; leave empty for mail only"
   bot_app_id: "empty, unless the bot is another application than client_id"
-  bot_tenant_id: "your tenant id for a single-tenant bot (the default for new bots); botframework.com for a multi-tenant one"
+  bot_tenant_id: "empty for a single-tenant bot (the default for new bots: its token comes from tenant_id); botframework.com for a multi-tenant one"
   service_url: "leave the default, https://smba.trafficmanager.net/teams/"
   start_label: "the start label of the project that takes the requests, agent-ready by default"
 ---
@@ -136,8 +136,9 @@ Entra — an Entra grant is tenant-wide and adds to the scoped roles, so every m
 1. Catalogue, **Plugins**, `microsoft-365-desk`, **Configure**.
 2. `tenant_id`, `client_id` from step 1; `client_secret` from step 3 (sealed, shown once).
 3. `mailbox`: the desk's address. `teams`: one `{team_id, channel_id}` per channel from step 10.
-4. `bot_tenant_id`: your tenant id for a single-tenant bot (step 6), `botframework.com` for a multi-tenant
-   one. Leave `bot_app_id` empty when the bot is the same application.
+4. `bot_tenant_id`: leave it empty for a single-tenant bot (step 6): the bot gets its token from
+   `tenant_id`. Type `botframework.com` for a multi-tenant bot. Leave `bot_app_id` empty when the bot is
+   the same application.
 5. Leave `service_url` at `https://smba.trafficmanager.net/teams/`: each verified activity names the
    service URL replies go to, and the server uses it; the default serves until the first one arrives. The
    server reaches `smba.trafficmanager.net` only; a sovereign cloud's Bot Connector (another host) needs a
@@ -171,8 +172,9 @@ Entra — an Entra grant is tenant-wide and adds to the scoped roles, so every m
   bot, or it mentions it and says nothing else.
 - `forbidden` reading a Teams message: the Teams app is not installed in that team, or the owner did not
   consent to `ChannelMessage.Read.Group`.
-- A Teams reply refused with `unauthorized` by the Bot Connector: `bot_tenant_id` does not match the bot's
-  type (single-tenant: your tenant id; multi-tenant: `botframework.com`).
+- A Teams reply refused with `unauthorized` (Entra or the Bot Connector): `bot_tenant_id` does not match
+  the bot's type. A single-tenant bot: leave it empty (or type your tenant id); a multi-tenant bot:
+  `botframework.com`. The bot's type is the one chosen in step 6.
 - A mail skipped by `tracker_list_candidates` (its `reason` says how many): its id is longer than a key
   allows. Answer it by hand.
 - A mail that never becomes a work item: an automatic one (an `Auto-Submitted` header, an out-of-office

@@ -65,9 +65,10 @@ config_schema:
       x-env: M365_DESK_BOT_APP_ID
     bot_tenant_id:
       type: string
-      default: botframework.com
-      pattern: "^(botframework\\.com|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
-      description: Where the bot gets its token, botframework.com for a multi-tenant bot, the tenant id for a single-tenant one.
+      pattern: "^(|botframework\\.com|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+      description: >-
+        Where the bot gets its token. Empty for a single-tenant bot (Azure Bot's default type): tenant_id.
+        botframework.com for a multi-tenant bot.
       x-env: M365_DESK_BOT_TENANT_ID
     service_url:
       type: string

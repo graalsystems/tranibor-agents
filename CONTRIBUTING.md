@@ -33,10 +33,24 @@ plugins/<name>/
 
 Every pull request runs `tranibor plugin validate` and a reproducible `pack` on each plugin, the tests
 of each server, the ServiceNow plugin's matrix cases played as the core's scripted eval matrix plays them
-and judged by its case judge, the publication script's tests and an offline dry run of it, gitleaks on
-the pull request's own commits (main's whole history on a push) and
-the DCO. Every job that needs the core runs it at one commit, `CHOREGOS_REF` in `ci.yml` (the same in
-`publish.yml`): move both together, to a release tag's commit.
+and judged by its case judge, the repository's own tests (`tests/`), the publication script's tests and
+an offline dry run of it, gitleaks on the pull request's own commits (main's whole history on a push)
+and the DCO. Every job that needs the core runs it at one commit, `CHOREGOS_REF` in `ci.yml` (the same
+in `publish.yml`): move both together, to a release tag's commit.
+
+## Documentation of a connector
+
+Every server ships a procedure (ADR 0067 of the core), declared in the plugin's `contents.procedures`:
+
+- its `applies_to` is `{connector: mcp/<plugin>}` (or `mcp/<server>` when the server has its own name);
+- the keys of its front matter `fields` are fields of the server's `config_schema`, and every entry of
+  `secret_fields` is described there;
+- it parses with the core's parser (`tranibor_core.procedures.parse`), as `tranibor plugin validate` does.
+
+The console shows it beside the form when the server is configured, and the core's documentation site
+publishes it (its connector pages are generated from this repository's procedures). The `templates` job
+holds every server to it (`tests/test_procedures.py`, from a core checkout:
+`uv run --frozen pytest -q -p no:cacheprovider <this repo>/tests`).
 
 ## Matrix cases and a server's fake
 

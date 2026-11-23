@@ -129,7 +129,7 @@ class Runtime:
         self.settings = settings
         self.fake: FakeServiceNow | None = None
         if transport is None and settings.fake:
-            self.fake = FakeServiceNow()
+            self.fake = FakeServiceNow(seed_file=settings.fake_seed)
             transport = httpx.MockTransport(self.fake)
         self.client = ServiceNowClient(settings, transport=transport)
         self.tools = ServiceNowTools(self.client)

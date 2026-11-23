@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.4.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.5.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -176,6 +176,31 @@ variable is needed (a token is, or `CHOREGOS_SERVER_INSECURE_DEV=1`); the webhoo
 - the matrix cases' data: `INC0012345` on the Lyon concentrator `vpn-lyon-01`, its ten similar incidents
   (nine of them with their journals), the change `CHG0003311` and the article `KB0010042`; and the vague
   `INC0012399`.
+
+### Seeding the fake from a file
+
+`SERVICENOW_FAKE_SEED=<path>` (with `SERVICENOW_FAKE=1`) makes the fake hold the incidents, groups,
+users, CIs and their relations, knowledge articles, journals and `sys_choice` rows of a JSON file, **in
+place of** the built-in seed above, so a demo shows its own incidents. Without the variable, the built-in
+seed is the instance. The format is documented at the top of
+[`seed_file.py`](server/src/choregos_servicenow/seed_file.py); every section is optional (`choices`
+absent: the built-in states, impacts and priorities), names are checked against the file's own rows, dates
+are days before now so a seed never goes stale, and a mistake stops the server at start with the file, the
+entry and the reason. [`server/seeds/sample-company.json`](server/seeds/sample-company.json) is a complete
+neutral example (a generic company, a head office and a branch: a duplicate pair, a vague incident, a VIP
+caller, a VPN incident whose similar resolved incident and published article name the fix); the image
+carries it at `/app/seeds/sample-company.json`. The matrix cases (`evals/matrix/`) read the built-in seed:
+they do not run on a custom file.
+
+```sh
+SERVICENOW_FAKE=1 SERVICENOW_FAKE_SEED=server/seeds/sample-company.json CHOREGOS_SERVER_INSECURE_DEV=1 \
+  uv run choregos-servicenow
+docker run --rm -p 8080:8080 -e SERVICENOW_FAKE=1 -e CHOREGOS_SERVER_INSECURE_DEV=1 \
+  -e SERVICENOW_FAKE_SEED=/seeds/demo.json -v "$PWD/demo.json:/seeds/demo.json:ro" <the server image>
+```
+
+The variable is not a configuration field and not in the server's `fake.env`: the platform's eval
+instance (core #1372) runs the built-in seed. Only whoever starts the server on its fake sets it.
 
 ## Run locally
 

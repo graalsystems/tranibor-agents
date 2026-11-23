@@ -6,7 +6,7 @@ name: servicenow
 image: ghcr.io/graalsystems/tranibor-agents/servicenow-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
 port: 8080
 protocol: mcp-http
-# MCP at /mcp, behind the platform's bearer token (CHOREGOS_SERVER_TOKEN); the health probe stays open.
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
 paths: {mcp: /mcp, health: /healthz}
 
 # What an administrator types when installing the plugin. Each property reaches the server as the
@@ -125,7 +125,7 @@ webhook:
 # How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
 # switches it to its seeded in-memory instance (server/src/choregos_servicenow/config.py), which no
 # configuration field reaches, and the one scene that instance serves. The platform adds its own token
-# (CHOREGOS_SERVER_TOKEN) and nothing of the configuration; CHOREGOS_SERVER_INSECURE_DEV is not needed.
+# (TRANIBOR_SERVER_TOKEN) and nothing of the configuration; TRANIBOR_SERVER_INSECURE_DEV is not needed.
 fake:
   env: {SERVICENOW_FAKE: "1"}
   scenes: [default]

@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.6, core `>=0.25.1,<1.0.0` (the first core whose agents declare their five components, ADR 0127) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.7, core `>=0.25.1,<1.0.0` (the first core whose agents declare their five components, ADR 0127) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.6.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.7.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -122,9 +122,9 @@ An MCP server (streamable HTTP at `/mcp`) over the ServiceNow **Table API**:
 | `create_change_request` | write, **a person approves** | idempotent through the platform's `action_key` (its `correlation_id`) |
 | `tracker_*` (8 tools) | read / write | the tracker profile, see [server/TRACKER_PROFILE.md](server/TRACKER_PROFILE.md) |
 
-Every call but `GET /healthz` needs `Authorization: Bearer $CHOREGOS_SERVER_TOKEN`, the token the
-platform generates and presents (ADR 0094), compared in constant time; without the variable the server
-refuses to start. It also serves `GET /healthz` and `POST /events`, the webhook a ServiceNow Business Rule
+Every call but `GET /healthz` needs `Authorization: Bearer $TRANIBOR_SERVER_TOKEN`, the token the
+platform generates and presents (ADR 0094; an older core's `CHOREGOS_SERVER_TOKEN` is still read),
+compared in constant time; without the variable the server refuses to start. It also serves `GET /healthz` and `POST /events`, the webhook a ServiceNow Business Rule
 posts to through the platform (the shared secret in `X-Choregos-Secret`, compared in constant time; answers
 `[{kind, item_key, delivery_id}]` with `delivery_id = sys_id:sys_mod_count`).
 
@@ -156,16 +156,16 @@ are sealed):
 | `SERVICENOW_USERNAME`, `SERVICENOW_PASSWORD` | the integration user (`auth=basic`); give it a custom role, never `admin` |
 | `SERVICENOW_WEBHOOK_SECRET` | the secret the Business Rule sends; without it, `/events` refuses everything |
 | `SERVICENOW_ASSIGNMENT_GROUPS` | comma-separated group names or sys_ids whose queue `tracker_list_candidates` polls |
-| `CHOREGOS_SERVER_TOKEN` | the platform's bearer token, required on every call but `/healthz`; set by the platform, never typed |
+| `TRANIBOR_SERVER_TOKEN` | the platform's bearer token, required on every call but `/healthz`; set by the platform, never typed (an older core sets `CHOREGOS_SERVER_TOKEN`, still read) |
 | `SERVICENOW_FAKE` | `1` for the fake instance (below); what the server's `fake` declares, never a configuration field |
-| `CHOREGOS_SERVER_INSECURE_DEV` | `1` with `SERVICENOW_FAKE=1` only: run without a token, for a local demo |
+| `TRANIBOR_SERVER_INSECURE_DEV` | `1` with `SERVICENOW_FAKE=1` only: run without a token, for a local demo |
 | `PORT` | listening port, `8080` by default |
 
 ## Fake mode
 
 `SERVICENOW_FAKE=1` puts a seeded in-memory instance under the real client (as an `httpx` transport),
 so the encoded queries, field lists and authentication follow the production path. No ServiceNow
-variable is needed (a token is, or `CHOREGOS_SERVER_INSECURE_DEV=1`); the webhook secret defaults to `fake-webhook-secret` and the queue to
+variable is needed (a token is, or `TRANIBOR_SERVER_INSECURE_DEV=1`); the webhook secret defaults to `fake-webhook-secret` and the queue to
 `Service Desk`. The seed:
 
 - twelve incidents: a duplicate pair (`INC0010001`/`INC0010002`, mobile mail), a vague one (`INC0010003`),
@@ -193,9 +193,9 @@ carries it at `/app/seeds/sample-company.json`. The matrix cases (`evals/matrix/
 they do not run on a custom file.
 
 ```sh
-SERVICENOW_FAKE=1 SERVICENOW_FAKE_SEED=server/seeds/sample-company.json CHOREGOS_SERVER_INSECURE_DEV=1 \
+SERVICENOW_FAKE=1 SERVICENOW_FAKE_SEED=server/seeds/sample-company.json TRANIBOR_SERVER_INSECURE_DEV=1 \
   uv run choregos-servicenow
-docker run --rm -p 8080:8080 -e SERVICENOW_FAKE=1 -e CHOREGOS_SERVER_INSECURE_DEV=1 \
+docker run --rm -p 8080:8080 -e SERVICENOW_FAKE=1 -e TRANIBOR_SERVER_INSECURE_DEV=1 \
   -e SERVICENOW_FAKE_SEED=/seeds/demo.json -v "$PWD/demo.json:/seeds/demo.json:ro" <the server image>
 ```
 
@@ -207,7 +207,7 @@ instance (core #1372) runs the built-in seed. Only whoever starts the server on 
 ```sh
 cd plugins/servicenow/server
 uv sync --dev
-SERVICENOW_FAKE=1 CHOREGOS_SERVER_INSECURE_DEV=1 uv run choregos-servicenow   # http://localhost:8080/mcp
+SERVICENOW_FAKE=1 TRANIBOR_SERVER_INSECURE_DEV=1 uv run choregos-servicenow   # http://localhost:8080/mcp
 curl localhost:8080/healthz
 uv run ruff check . && uv run ruff format --check . && uv run mypy --strict src && uv run pytest -q
 ```
@@ -217,7 +217,7 @@ Against a real instance (a Personal Developer Instance works):
 ```sh
 SERVICENOW_BASE_URL=https://dev12345.service-now.com SERVICENOW_AUTH=basic \
 SERVICENOW_USERNAME=choregos.integration SERVICENOW_PASSWORD=… \
-SERVICENOW_WEBHOOK_SECRET=… CHOREGOS_SERVER_TOKEN=… uv run choregos-servicenow
+SERVICENOW_WEBHOOK_SECRET=… TRANIBOR_SERVER_TOKEN=… uv run choregos-servicenow
 ```
 
 ### The live suite

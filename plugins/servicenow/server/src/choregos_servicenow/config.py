@@ -5,9 +5,11 @@ The platform fills these variables from the plugin's `config_schema` and its sea
 (`servers/servicenow.yaml`). `SERVICENOW_FAKE=1` replaces the instance with a seeded in-memory one, so
 tests and demos need no account.
 
-`CHOREGOS_SERVER_TOKEN` is the platform's (ADR 0094): the bearer token it presents on every call. The
-server refuses to start without it, except on the fake instance with `CHOREGOS_SERVER_INSECURE_DEV=1`
-said explicitly, for a local demo.
+`TRANIBOR_SERVER_TOKEN` is the platform's (ADR 0094): the bearer token it presents on every call. The
+server refuses to start without it, except on the fake instance with `TRANIBOR_SERVER_INSECURE_DEV=1`
+said explicitly, for a local demo. The core names the pod's variable `TRANIBOR_SERVER_TOKEN` since its
+`TRANIBOR_*` rename (core ADR 0176, S75-04); an older core sets `CHOREGOS_SERVER_TOKEN`, still read when
+the new name is absent (and `CHOREGOS_SERVER_INSECURE_DEV` likewise).
 """
 
 from __future__ import annotations
@@ -23,6 +25,14 @@ FAKE_BASE_URL = "https://fake.service-now.test"
 FAKE_USERNAME = "choregos.integration"
 FAKE_PASSWORD = "fake-password"  # noqa: S105 - the fake's own credential, not a secret
 FAKE_WEBHOOK_SECRET = "fake-webhook-secret"  # noqa: S105 - idem
+#: The platform's token variable, the current core's name first, then an older core's.
+TOKEN_ENVS = ("TRANIBOR_SERVER_TOKEN", "CHOREGOS_SERVER_TOKEN")
+INSECURE_DEV_ENVS = ("TRANIBOR_SERVER_INSECURE_DEV", "CHOREGOS_SERVER_INSECURE_DEV")
+
+
+def _first(source: Mapping[str, str], names: tuple[str, ...]) -> str:
+    """The value of the first of `names` set to something, else empty."""
+    return next((source[name] for name in names if source.get(name)), "")
 
 
 class Settings(BaseModel):
@@ -44,7 +54,7 @@ class Settings(BaseModel):
     port: int = 8080
     #: The bearer token the platform presents on every call but the health probe (ADR 0094).
     server_token: SecretStr | None = None
-    #: `CHOREGOS_SERVER_INSECURE_DEV=1`: no token, accepted on the fake instance only.
+    #: `TRANIBOR_SERVER_INSECURE_DEV=1`: no token, accepted on the fake instance only.
     insecure_dev: bool = False
 
     @model_validator(mode="after")
@@ -64,8 +74,9 @@ class Settings(BaseModel):
         if self.fake and self.insecure_dev:
             return None
         raise ValueError(
-            "CHOREGOS_SERVER_TOKEN is not set: the server refuses to start without the platform's token "
-            "(only SERVICENOW_FAKE=1 with CHOREGOS_SERVER_INSECURE_DEV=1 runs without it)"
+            "TRANIBOR_SERVER_TOKEN (or an older core's CHOREGOS_SERVER_TOKEN) is not set: the server refuses to "
+            "start without the platform's token (only SERVICENOW_FAKE=1 with TRANIBOR_SERVER_INSECURE_DEV=1 runs "
+            "without it)"
         )
 
     @property
@@ -77,8 +88,9 @@ class Settings(BaseModel):
         source = os.environ if env is None else env
         groups = tuple(g.strip() for g in source.get("SERVICENOW_ASSIGNMENT_GROUPS", "").split(",") if g.strip())
         port = int(source.get("PORT", "8080"))
-        server_token = SecretStr(source["CHOREGOS_SERVER_TOKEN"]) if source.get("CHOREGOS_SERVER_TOKEN") else None
-        insecure_dev = source.get("CHOREGOS_SERVER_INSECURE_DEV", "") == "1"
+        token = _first(source, TOKEN_ENVS)
+        server_token = SecretStr(token) if token else None
+        insecure_dev = _first(source, INSECURE_DEV_ENVS) == "1"
         if source.get("SERVICENOW_FAKE", "") in ("1", "true", "yes"):
             return cls(
                 base_url=FAKE_BASE_URL,

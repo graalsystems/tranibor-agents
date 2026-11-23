@@ -15,6 +15,10 @@ neither does this server. A token is accepted when:
   expired (5 minutes of clock skew allowed);
 - its `serviceurl` claim, when present, is the activity's `serviceUrl`.
 
+The Bot Connector signs a single-tenant bot's deliveries as a multi-tenant one's: `bot_tenant_id` only
+says where the bot's own token for its replies comes from (`microsoft.Tokens.bot`), not how a delivery
+is verified.
+
 Anything else — no header, another scheme, a malformed token, an unknown key, keys that cannot be read —
 is "not verified": the delivery is answered `{verified: false}` and nothing of it is used.
 """

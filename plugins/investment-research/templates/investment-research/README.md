@@ -51,7 +51,7 @@ run's own token — never a provider key:
 
 | Name | Capability | For |
 |:--|:--|:--|
-| `marketdata` | `marketdata` (`stooq`, `yahoo`, `alphavantage`, `composite`) | daily bars of the universe |
+| `marketdata` | `marketdata` (`stooq`, `yahoo`, `alphavantage`, `tiingo`, `composite`) | daily bars of the universe |
 
 The sandbox is closed (`preset:regulated`): no agent and no job reaches the internet.
 

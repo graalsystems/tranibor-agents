@@ -39,7 +39,7 @@ def http() -> Iterator[TestClient]:
 
 def test_healthz_is_open(http: TestClient) -> None:
     response = http.get("/healthz", headers={"Authorization": ""})
-    assert response.json() == {"status": "ok", "fake": True, "version": "0.1.0"}
+    assert response.json() == {"status": "ok", "fake": True, "version": "0.1.1"}
 
 
 @pytest.mark.parametrize(
@@ -116,7 +116,14 @@ def test_a_real_configuration_starts_and_reads_its_variables() -> None:
         False,
     )
     assert Settings.from_env(REAL).bot_id == REAL["M365_DESK_CLIENT_ID"]
-    assert Settings.from_env(REAL).bot_tenant_id == "botframework.com"
+    # An empty bot_tenant_id is a single-tenant bot in tenant_id (Azure Bot's default type); a
+    # multi-tenant bot says botframework.com.
+    for empty in ({}, {"M365_DESK_BOT_TENANT_ID": ""}):
+        single = Settings.from_env({**REAL, **empty})
+        assert (single.bot_tenant_id, single.bot_token_tenant) == (None, REAL["M365_DESK_TENANT_ID"])
+    multi = Settings.from_env({**REAL, "M365_DESK_BOT_TENANT_ID": "botframework.com"})
+    assert multi.bot_token_tenant == "botframework.com"
+    assert settings.bot_token_tenant == REAL["M365_DESK_TENANT_ID"]
     with TestClient(build_app(Settings.from_env(REAL)), base_url=BASE) as client:
         assert client.get("/healthz").json()["fake"] is False
 

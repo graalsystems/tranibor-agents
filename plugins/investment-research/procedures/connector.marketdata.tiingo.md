@@ -3,8 +3,8 @@ id: connector.marketdata.tiingo
 title: Use Tiingo for daily market data
 applies_to: {connector: marketdata/tiingo}
 audience: project_owner
-version: 1
-reviewed: 2026-10-26
+version: 2
+reviewed: 2026-11-23
 vendor_docs:
   - {title: "Tiingo: pricing and limits", url: "https://www.tiingo.com/about/pricing"}
   - {title: "Tiingo: end-of-day API", url: "https://www.tiingo.com/documentation/end-of-day"}
@@ -12,6 +12,7 @@ egress: [api.tiingo.com]
 fields:
   api_key: "your Tiingo API token, typed once"
   timeout_s: "request timeout in seconds"
+  key_rotation: "with several keys (api_key.2 …): failover, the default, uses the first that answers; round_robin spreads the calls"
 ---
 
 ## Before you start
@@ -36,6 +37,14 @@ Connectors, **Market data**, type **Tiingo**. `api_key` in the password field (s
 **composite**, list it after the primary source, for example `["yahoo", "tiingo"]`, with the token in
 `tiingo_api_key`: it then cross-checks the whole range, not only the recent days.
 
+**Several keys.** `api_key` holds up to ten keys: **Add a key** under the field types the next one in its
+own slot (`api_key.2` … `api_key.10`), sealed like the first. `key_rotation` says how they are used:
+`failover` (the default) uses the first that answers, `round_robin` spreads the calls. A key whose
+allocation is used rests (for 60 seconds) and a refused one for 10 minutes; the call is made again at once
+with the next one. To replace a token without a gap, add the new one, then clear the old one. With
+`failover`, **Test** uses the first usable token, the old one: to check the new token, clear the old one
+(or put the new one first), then press **Test**. Only tokens your organisation is entitled to: one account, one token, as above.
+
 ## Test it
 
 Press **Test** (it reads SPY's metadata, one request), then call `get_bars` for a known ticker.
@@ -43,5 +52,8 @@ Press **Test** (it reads SPY's metadata, one request), then call `get_bars` for 
 ## When it fails
 
 - "the key was refused": the token is wrong or revoked.
+- "tiingo: every key is resting (about N s)": with several tokens, each one reached its allocation (some
+  may also have been refused); wait that long. When every token is refused, the message is the one above,
+  "the key was refused", prefixed with the slot (`api_key.N`).
 - A message about the hourly or daily allocation: the free limits are reached; wait for the next hour or day.
 - An unknown symbol: Tiingo writes share classes with a dash (`BRK-B`).

@@ -13,7 +13,7 @@ answered in the original thread:
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `microsoft-365-desk` 0.1.0, core `>=0.28.0,<1.0.0` (the first core with `webhook.forward_authorization`, ADR 0198) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `microsoft-365-desk` 0.1.1, core `>=0.28.0,<1.0.0` (the first core with `webhook.forward_authorization`, ADR 0198) |
 | Server | [`servers/desk.yaml`](servers/desk.yaml), [`server/`](server) | the MCP server `desk`: a plugin tracker (`implements: [tracker]`), its `reply`, and its `fake` |
 | Tracker profile | [`server/TRACKER_PROFILE.md`](server/TRACKER_PROFILE.md) | keys, every tool's mapping, idempotence |
 | Procedure | [`procedures/connector.mcp.microsoft-365-desk.md`](procedures/connector.mcp.microsoft-365-desk.md) | the Entra application, the mailbox's RBAC scope, the Azure Bot, the Teams app |
@@ -22,10 +22,49 @@ answered in the original thread:
 
 ```sh
 tranibor plugin validate plugins/microsoft-365-desk
-tranibor plugin pack plugins/microsoft-365-desk -o microsoft-365-desk-0.1.0.tar.gz   # same bytes every time
+tranibor plugin pack plugins/microsoft-365-desk -o microsoft-365-desk-0.1.1.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
+
+## Setting it up
+
+In short (the procedure has every click and command):
+
+1. **An Entra application** (single tenant, no redirect URI, `User.Read` removed) and a client secret.
+2. **RBAC for Applications on the one mailbox**: in Exchange Online, the application's service principal,
+   a management scope holding the shared mailbox only, and the roles `Application Mail.ReadWrite` and
+   `Application Mail.Send` on that scope; no Graph mail permission granted in Entra.
+3. **An Azure Bot** (for Teams) on that application, its messaging endpoint the plugin server's webhook
+   URL, with the Microsoft Teams channel.
+4. **The Teams app** (for Teams): `python teams/build_app.py --client-id <client id> --developer "<your
+   organisation>" --website https://<your site> -o it-desk.zip` builds the package (the bot and the
+   resource-specific permission `ChannelMessage.Read.Group`); upload it, and the team's owner adds it and
+   consents. A built package is never committed (`.gitignore`).
+5. **Configure the plugin's server** (Catalogue, **Plugins**, `microsoft-365-desk`, **Configure**) with the
+   fields below.
+6. **Make a project from the template `access-requests-m365`**, whose tracker is this server
+   (`plugin:microsoft-365-desk/desk`) and whose start label is `start_label`.
+
+The server's configuration fields ([`servers/desk.yaml`](servers/desk.yaml), `config_schema`). At least
+one channel, `mailbox` or `teams`, is configured: the server refuses to start otherwise.
+
+| Field | Required | What it is | Secret |
+|:--|:--|:--|:--|
+| `tenant_id` | yes | the Directory (tenant) ID of the Microsoft Entra tenant | no |
+| `client_id` | yes | the Application (client) ID of the Entra application (the bot's Microsoft App ID too) | no |
+| `client_secret` | yes | a client secret of the Entra application | yes: sealed, never shown again |
+| `mailbox` | no | the shared mailbox's address, e.g. `it-desk@contoso.com` (the only mailbox RBAC lets the application reach) | no |
+| `teams` | no | the Teams channels whose bot mentions become work items, each `{team_id, channel_id}` (at most 20) | no |
+| `bot_app_id` | no | the bot's Microsoft App ID, when it is not `client_id` (its secret is still `client_secret`) | no |
+| `bot_tenant_id` | no | where the bot gets its token: empty for a single-tenant bot (Azure Bot's default type), from `tenant_id`; `botframework.com` for a multi-tenant bot | no |
+| `service_url` | no (default `https://smba.trafficmanager.net/teams/`) | the Bot Connector URL replies go to until a verified activity of the channel names its own | no |
+| `start_label` | no (default `agent-ready`) | the label a request carries until Tranibor takes it (the project's start label) | no |
+
+The full procedure, [`procedures/connector.mcp.microsoft-365-desk.md`](procedures/connector.mcp.microsoft-365-desk.md)
+(`applies_to: {connector: mcp/microsoft-365-desk}`), is shown in the console when the server is configured,
+and is published on the core's documentation site, from core 0.28.2 (ADR 0215). An older core shows the
+generic MCP procedure there; the procedure itself is still installed with the plugin.
 
 ## The tools
 

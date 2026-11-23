@@ -103,6 +103,17 @@ def test_egress_is_microsoft_and_nothing_else() -> None:
     )
 
 
+def test_bot_tenant_id_has_no_default_so_an_empty_one_is_a_single_tenant_bot() -> None:
+    """A default `botframework.com` would make every new bot (single-tenant, Azure Bot's default type) ask
+    the wrong tenant for its token; empty means `tenant_id`, and `botframework.com` is said explicitly."""
+    field = descriptor()["config_schema"]["properties"]["bot_tenant_id"]
+    assert "default" not in field
+    pattern = re.compile(field["pattern"])
+    for accepted in ("", "botframework.com", "0f6f2f1c-1111-4222-8333-444455556666"):
+        assert pattern.match(accepted), accepted
+    assert not pattern.match("common")
+
+
 def test_the_declared_fake_is_what_switches_the_server_to_its_fake_and_no_administrator_reaches_it() -> None:
     """`fake` (core #1372): the platform runs an eval instance with exactly these variables and its own
     token, nothing of the configuration. They switch the server to its seeded tenant; none is the

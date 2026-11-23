@@ -103,6 +103,14 @@ jobs:
             echo "::endgroup::"
           done
           [ "$found" = 1 ] || echo "no template tests yet"
+      # The repository's own tests (tests/test_procedures.py): every plugin server has its procedure, whose
+      # fields are the server's configuration, each parsed by the core's ADR 0067 parser at CHOREGOS_REF.
+      - name: the repository's tests against the core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd core
+          TRANIBOR_CORE="$PWD" uv run --frozen pytest -q -p no:cacheprovider "$GITHUB_WORKSPACE/agents/tests"
 
   e2e:
     # Each plugin's `e2e/` tests run on the core's e2e bench (Temporal in skipped time, the API in-process,

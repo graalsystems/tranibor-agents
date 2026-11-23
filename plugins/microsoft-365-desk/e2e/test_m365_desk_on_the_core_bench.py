@@ -114,7 +114,7 @@ async def kube(platform: Platform, tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("TRANIBOR_PLUGIN_FILES_DIR", str(tmp_path / "plugin-files"))
     reset_settings_cache()
     root = tmp_path / "plugins"
-    target = root / "microsoft-365-desk" / "0.1.0"
+    target = root / "microsoft-365-desk" / "0.1.1"
     shutil.copytree(
         PLUGIN_DIR, target, ignore=shutil.ignore_patterns(".venv", "__pycache__", "*.zip", "uv.lock")
     )
@@ -174,7 +174,7 @@ async def _organisation(platform: Platform, kube: Any, teams: bool = False) -> O
     assert created.status_code == 201, created.text
 
     asked = await client.post(
-        f"{ORG}/plugins/install", json={"source": "offline", "name": "microsoft-365-desk", "version": "0.1.0"}
+        f"{ORG}/plugins/install", json={"source": "offline", "name": "microsoft-365-desk", "version": "0.1.1"}
     )
     assert asked.status_code == 202, asked.text
     await _member(client, SECOND, "org_admin")

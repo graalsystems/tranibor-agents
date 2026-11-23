@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.0, core `>=0.25.1,<1.0.0` (the first core whose agents declare their five components, ADR 0127) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.5, core `>=0.25.1,<1.0.0` (the first core whose agents declare their five components, ADR 0127) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.4.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.5.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.

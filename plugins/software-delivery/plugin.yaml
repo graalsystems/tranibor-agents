@@ -6,7 +6,7 @@ apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: software-delivery
-  version: 1.3.1
+  version: 1.4.0
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-
@@ -32,7 +32,10 @@ metadata:
   # entry point of the core's `tranibor-software-delivery` wheel, which carries the release train, the
   # SCM/CI/CD connectors and the delivery workflows since round D. A deployment without it refuses the plugin,
   # naming it; an older core refuses the unknown field, so it keeps 1.2.2.
-  core: ">=0.28.1,<1.0.0"
+  # 1.4.0: the developer, qa and tester agents and the test-first skill name the evidence the core 0.29 reads,
+  # the named facts of `evidence.facts` (ADR 0181, whose windows closed on 2026-11-23: the evidence fields
+  # left the stage result). An older core keeps 1.3.1.
+  core: ">=0.29.0,<1.0.0"
 requires:
   plugins: []
   connectors: {}

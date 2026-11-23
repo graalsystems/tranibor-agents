@@ -39,7 +39,8 @@ Connectors, **Market data**, type **Alpha Vantage**. `api_key` in the password f
 own slot (`api_key.2` … `api_key.10`), sealed like the first. `key_rotation` says how they are used:
 `failover` (the default) uses the first that answers, `round_robin` spreads the calls. A key whose limit
 is reached rests (for 60 seconds) and the call is made again at once with the next one. To replace a key
-without a gap, add the new one, press **Test**, then clear the old one. Use only keys your organisation
+without a gap, add the new one, then clear the old one: **Test** checks the configuration only (it calls
+no Alpha Vantage endpoint), so the new key is first used once the old one is cleared or resting. Use only keys your organisation
 is entitled to: the free tier is one key per person, so several free keys do not add up their limits.
 
 ## Test it

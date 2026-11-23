@@ -26,12 +26,14 @@ ones its instructions name:
 The agent sees each tool as `<connector>__<tool>` (`cilium__get_flows`). `validate_nginx_config`, which
 the instructions call before proposing an nginx change, is a platform tool, not one of these connectors'.
 
-Each of the three is an **MCP connector the organisation creates under that name** (`pfsense`, `cilium`,
-`nginx`), pointing to an MCP server for that system that exposes those tools. This plugin ships no such
-server and names none. The core's generic procedure for an MCP connector is `connector.mcp.mcp`
-("Connect an MCP server"). The core's `connector.firewall.pfsense`, `connector.network_policy.cilium` and
-`connector.web_server.nginx` procedures cover the core's own connector types (`firewall/pfsense`,
-`network_policy/cilium`, `web_server/nginx`), not these MCP connectors.
+The agent reaches each connector **by its name** (`pfsense`, `cilium`, `nginx`). The core's own
+connector types expose exactly these operations: `firewall/pfsense` (`list_firewall_rules`,
+`create_firewall_rule`, …), `network_policy/cilium` (`get_flows`, `propose_network_policy`, …) and
+`web_server/nginx` (`read_nginx_file`, `propose_nginx_config`, …). Create each one under its name and
+set it up with the core's procedure, shown in the console beside the connector's form:
+`connector.firewall.pfsense`, `connector.network_policy.cilium` and `connector.web_server.nginx`. An MCP
+connector of the same name whose server exposes the same tool names works too; the plugin ships no
+server of its own.
 
 **Tool scripts by default** (1.1.0, catalogue version 3). The agent's spec says `tools: {scripts: offer}`
 (the core's ADR 0122 §9): a run may call its tools from a script it writes, through the runner's tool

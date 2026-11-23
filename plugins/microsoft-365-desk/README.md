@@ -63,7 +63,8 @@ one channel, `mailbox` or `teams`, is configured: the server refuses to start ot
 
 The full procedure, [`procedures/connector.mcp.microsoft-365-desk.md`](procedures/connector.mcp.microsoft-365-desk.md)
 (`applies_to: {connector: mcp/microsoft-365-desk}`), is shown in the console when the server is configured,
-and is published on the core's documentation site.
+and is published on the core's documentation site, from core 0.28.2 (ADR 0213). An older core shows the
+generic MCP procedure there; the procedure itself is still installed with the plugin.
 
 ## The tools
 

@@ -8,4 +8,4 @@ dist/
 *.tar.gz
 # A built Teams app package (microsoft-365-desk's teams/build_app.py, it-desk.zip by default) holds a
 # tenant's client id: it is built where it is uploaded, never committed.
-*.zip
+plugins/microsoft-365-desk/**/*.zip

@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+import os
 import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -183,9 +184,12 @@ class FakeServiceNow:
     Australia instance): `journal_readable = False` filters every `sys_journal_field` row out (an answer of
     200 and no row), `choices_readable = False` refuses `sys_choice` (403), `unwritable` holds the
     `(table, field)` a write keeps silently (an answer of 200 and the old value), and `tz_offset_hours` is
-    the reading user's time zone, in which every date label and journal header is rendered."""
+    the reading user's time zone, in which every date label and journal header is rendered.
 
-    def __init__(self, *, token_ttl_s: int = 1800) -> None:
+    `seed_file`: a JSON file (`seed_file.py`) that replaces the built-in seed, so a demo shows its own
+    incidents; none, the built-in seed."""
+
+    def __init__(self, *, token_ttl_s: int = 1800, seed_file: str | os.PathLike[str] | None = None) -> None:
         self.tables: dict[str, dict[str, dict[str, Any]]] = {}
         self.journal_readable = True
         self.choices_readable = True
@@ -196,7 +200,12 @@ class FakeServiceNow:
         self.token_ttl_s = token_ttl_s
         self.tokens_issued = 0
         self._numbers = itertools.count(20001)
-        seed(self)
+        if seed_file:
+            from .seed_file import load_seed_file
+
+            load_seed_file(self, seed_file)
+        else:
+            seed(self)
 
     # ───── store helpers ─────
 
@@ -438,7 +447,8 @@ PROMPT_INJECTION = (
 )
 
 
-def seed(fake: FakeServiceNow) -> None:
+def seed_choices(fake: FakeServiceNow) -> None:
+    """The `sys_choice` rows of the states, impacts, urgencies and priorities (generic: no company in them)."""
     ins = fake.insert
     for name, element, choices in (
         ("incident", "state", [("1", "New"), ("2", "In Progress"), ("3", "On Hold"), ("6", "Resolved"),
@@ -466,6 +476,39 @@ def seed(fake: FakeServiceNow) -> None:
                 ins("sys_choice", {"sys_id": sys_id_of(f"choice:{table}:{element}:{value}"), "name": table,
                                    "element": element, "value": value, "label": label, "sequence": str(seq),
                                    "inactive": "false", "language": "en"})  # fmt: skip
+
+
+def incident_writer(fake: FakeServiceNow) -> Callable[..., None]:
+    """`incident(number, title, description, ...)`: writes one incident row, its priority derived."""
+    ins = fake.insert
+
+    def incident(number: str, title: str, description: str, *, state: str = "1", impact: str = "3",
+                 urgency: str = "3", group: str = "Service Desk", caller: str = "abel.tuter",
+                 ci: str | None = None, category: str = "inquiry", created_days: float = 1,
+                 resolved_days: float | None = None, close_notes: str = "") -> None:  # fmt: skip
+        record = {
+            "sys_id": sys_id_of(number), "number": number, "short_description": title,
+            "description": description, "state": state, "impact": impact, "urgency": urgency,
+            "category": category, "subcategory": "", "assignment_group": sys_id_of(f"group:{group}") if group else "",
+            "assigned_to": "", "caller_id": sys_id_of(f"user:{caller}") if caller else "",
+            "cmdb_ci": sys_id_of(f"ci:{ci}") if ci else "", "opened_at": _ago(created_days),
+            "resolved_at": _ago(resolved_days) if resolved_days is not None else "",
+            "closed_at": _ago(resolved_days) if resolved_days is not None and state == "7" else "",
+            "close_code": "Solution provided" if resolved_days is not None else "",
+            "close_notes": close_notes, "correlation_id": "",
+            "active": "false" if state in ("7", "8") else "true",
+            "sys_created_on": _ago(created_days), "sys_updated_on": _ago(resolved_days or created_days),
+            "sys_mod_count": "2",
+        }  # fmt: skip
+        record["priority"] = _PRIORITY[(impact, urgency)]
+        ins("incident", record)
+
+    return incident
+
+
+def seed(fake: FakeServiceNow) -> None:
+    ins = fake.insert
+    seed_choices(fake)
 
     for user, name, vip in (
         ("abel.tuter", "Abel Tuter", "false"),
@@ -529,26 +572,7 @@ def seed(fake: FakeServiceNow) -> None:
                              "text": text, "workflow_state": state, "kb_category": "", "valid_to": "2100-01-01",
                              "active": "true", "sys_updated_on": _ago(60)})  # fmt: skip
 
-    def incident(number: str, title: str, description: str, *, state: str = "1", impact: str = "3",
-                 urgency: str = "3", group: str = "Service Desk", caller: str = "abel.tuter",
-                 ci: str | None = None, category: str = "inquiry", created_days: float = 1,
-                 resolved_days: float | None = None, close_notes: str = "") -> None:  # fmt: skip
-        record = {
-            "sys_id": sys_id_of(number), "number": number, "short_description": title,
-            "description": description, "state": state, "impact": impact, "urgency": urgency,
-            "category": category, "subcategory": "", "assignment_group": sys_id_of(f"group:{group}"),
-            "assigned_to": "", "caller_id": sys_id_of(f"user:{caller}"),
-            "cmdb_ci": sys_id_of(f"ci:{ci}") if ci else "", "opened_at": _ago(created_days),
-            "resolved_at": _ago(resolved_days) if resolved_days is not None else "",
-            "closed_at": _ago(resolved_days) if resolved_days is not None and state == "7" else "",
-            "close_code": "Solution provided" if resolved_days is not None else "",
-            "close_notes": close_notes, "correlation_id": "",
-            "active": "false" if state in ("7", "8") else "true",
-            "sys_created_on": _ago(created_days), "sys_updated_on": _ago(resolved_days or created_days),
-            "sys_mod_count": "2",
-        }  # fmt: skip
-        record["priority"] = _PRIORITY[(impact, urgency)]
-        ins("incident", record)
+    incident = incident_writer(fake)
 
     incident(
         "INC0010001",

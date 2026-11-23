@@ -47,7 +47,7 @@ Every server ships a procedure (ADR 0067 of the core), declared in the plugin's 
   `secret_fields` is described there;
 - it parses with the core's parser (`tranibor_core.procedures.parse`), as `tranibor plugin validate` does.
 
-From core 0.28.2 (ADR 0213), the console shows it beside the form when the server is configured, and the
+From core 0.28.2 (ADR 0215), the console shows it beside the form when the server is configured, and the
 core's documentation site publishes it (its connector pages are generated from this repository's
 procedures). The `templates` job
 holds every server to it (`tests/test_procedures.py`, from a core checkout:

@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.10, core `>=0.25.1,<1.0.0` (the first core whose agents declare their five components, ADR 0127) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.11, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.10.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.11.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -100,9 +100,6 @@ Found while writing this plugin against the core at `49fc8082` (S43-02):
   platform-filled arguments (`action_key`): they are kept as comments and operation descriptions in
   `servers/servicenow.yaml`, and `server/tests/test_descriptor.py` checks them.
 - A template cannot name a plugin's server as its tracker (see the template's README).
-- A template cannot set its project's start rules: a project from `itsm-incident-triage` needs
-  `start_rules: [{item_type: incident, states: [New]}]` set on it, or it opens no work item (see the
-  template's README).
 - A procedure's `{{webhook_url:…}}` only knows the core's webhook sources; the Business Rule's URL is
   written `{{api_url}}/api/v1/webhooks/plugins/servicenow/servicenow`.
 - The connector an installed plugin server becomes is assumed to be named after the server

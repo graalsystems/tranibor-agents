@@ -3,7 +3,7 @@ apiVersion: choregos/v1
 kind: Template
 metadata:
   name: itsm-incident-triage
-  version: 0.1.1
+  version: 0.1.2
   display: ServiceNow · incident triage under approval
   description: >-
     Incidents of a ServiceNow assignment queue become work items. The ITSM triager reads each one and
@@ -24,6 +24,14 @@ defaults:
   workflows: [./workflows/incident-triage.yaml]
   default_workflow: incident-triage
   policy: preset:solo
+  # The queue's incidents carry no label (the server returns `labels: []`), and the core opens a plugin
+  # tracker's item only with `agent-ready` or a project start rule: without this rule a project from the
+  # template polls the queue and opens nothing (graalsystems/tranibor-agents#38). New incidents only, not the
+  # ones already In Progress or On Hold. A creation request that sets its own `start_rules` keeps them.
+  # `defaults.start_rules` exists from core 0.29.2 (graalsystems/tranibor#2200): hence the plugin's floor.
+  start_rules:
+    - item_type: incident
+      states: [New]
   # The agent `itsm-triager` and the skill `servicenow-triage` come with the plugin itself (installed in
   # the organisation when the plugin is), so the template does not list them.
 inputs: []

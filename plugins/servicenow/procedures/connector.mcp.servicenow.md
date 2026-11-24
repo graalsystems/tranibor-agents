@@ -168,6 +168,10 @@ organisation can only make that stricter.
 5. `assignment_groups`: the groups the Business Rule filters on.
 6. Create a project from the template **ServiceNow · incident triage under approval**. Put the people who
    review the triage in the `service-desk` group.
+7. Give that project a start rule, in its settings, **Triggers** (start rules, JSON):
+   `[{"item_type": "incident", "states": ["New"]}]`. The incidents carry no `agent-ready` label, and
+   without a rule the project polls the queue and opens nothing; with it, each new incident of the groups
+   becomes a work item, and the ones already in progress do not.
 
 ## Test it
 

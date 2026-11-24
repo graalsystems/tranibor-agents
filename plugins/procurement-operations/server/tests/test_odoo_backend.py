@@ -558,19 +558,16 @@ async def test_create_purchase_request_writes_a_draft_order_with_its_lines_and_a
     }
 
 
-@pytest.mark.parametrize(
-    ("field", "readable_xmlid"), [("product_uom_id", True), ("product_uom", True), ("product_uom_id", False)]
-)
-async def test_every_line_carries_the_reference_unit_by_the_field_this_odoo_has(
-    odoo: Odoo, field: str, readable_xmlid: bool
-) -> None:
+@pytest.mark.parametrize("field", ["product_uom_id", "product_uom", "uom_id", "unit_of_line"])
+async def test_every_line_carries_the_reference_unit_by_the_field_this_odoo_has(odoo: Odoo, field: str) -> None:
     """Odoo 20 fails on a line without a product and without a unit (`Expected singleton: uom.uom()`, the
-    core's night of 2026-11-24): the unit is set, by the field the version has, and asked once."""
+    core's night of 2026-11-24), and names the field neither `product_uom_id` nor `product_uom` (the next
+    night): the field is the line's many2one to `uom.uom`, the unit is asked by name, both once."""
     for key in ("k1", "k2"):
         odoo.script.expect("purchase.order", "search_read", [])
         odoo.script.expect("res.currency", "search_read", [{"id": 1, "name": "EUR"}])
         if key == "k1":
-            unit_of_measure(odoo.script, field, readable_xmlid=readable_xmlid)
+            unit_of_measure(odoo.script, field)
         odoo.script.expect("purchase.order", "create", [31])
         odoo.script.expect("purchase.order", "search_read", [ORDER_ROW])
         odoo.script.expect("purchase.order.line", "search_read", ORDER_LINES)
@@ -579,6 +576,39 @@ async def test_every_line_carries_the_reference_unit_by_the_field_this_odoo_has(
         lines = [values for _, _, values in sent["vals_list"][0]["order_line"]]
         assert [line[field] for line in lines] == [1, 1]
     assert len(odoo.script.sent("purchase.order.line", "fields_get")) == 1
+    [asked] = odoo.script.sent("uom.uom", "search_read")
+    assert asked["context"] == {"lang": "en_US"} and asked["domain"] == [["name", "in", ["Units", "Unit"]]]
+    assert odoo.script.sent("ir.model.data", "search_read") == [], "the integration user may not read it"
+
+
+async def test_a_unit_field_by_a_known_name_wins_over_another_one(odoo: Odoo) -> None:
+    odoo.script.expect("purchase.order", "search_read", [])
+    odoo.script.expect("res.currency", "search_read", [{"id": 1, "name": "EUR"}])
+    odoo.script.expect(
+        "purchase.order.line",
+        "fields_get",
+        {
+            "a_secondary_uom": {"type": "many2one", "relation": "uom.uom", "readonly": False},
+            "product_uom_id": {"type": "many2one", "relation": "uom.uom", "readonly": False},
+        },
+    )
+    odoo.script.expect("uom.uom", "search_read", [{"id": 1, "name": "Units"}])
+    odoo.script.expect("purchase.order", "create", [31])
+    odoo.script.expect("purchase.order", "search_read", [ORDER_ROW])
+    odoo.script.expect("purchase.order.line", "search_read", ORDER_LINES)
+    await odoo.backend.create_purchase_request(_request(contract_id="21"), action_key="k")
+    [sent] = odoo.script.sent("purchase.order", "create")
+    assert all("product_uom_id" in v and "a_secondary_uom" not in v for _, _, v in sent["vals_list"][0]["order_line"])
+
+
+async def test_an_odoo_without_a_unit_named_units_is_a_backend_error_before_a_write(odoo: Odoo) -> None:
+    odoo.script.expect("purchase.order", "search_read", [])
+    odoo.script.expect("res.currency", "search_read", [{"id": 1, "name": "EUR"}])
+    odoo.script.expect("purchase.order.line", "fields_get", {"uom_id": {"type": "many2one", "relation": "uom.uom"}})
+    odoo.script.expect("uom.uom", "search_read", [])
+    with pytest.raises(BackendError, match="no reference unit"):
+        await odoo.backend.create_purchase_request(_request(), action_key="k")
+    assert odoo.script.sent("purchase.order", "create") == []
 
 
 async def test_an_odoo_whose_line_has_no_unit_field_is_a_backend_error_before_a_write(odoo: Odoo) -> None:

@@ -141,13 +141,16 @@ def one_supplier_row(number: int = 7, **more: Any) -> dict[str, Any]:
     }
 
 
-def unit_of_measure(script: Script, field: str = "product_uom_id", *, readable_xmlid: bool = True) -> Script:
-    """What the backend asks once before its first purchase order: the line's unit field, then the
-    reference unit (by its external identifier, else by its name)."""
-    script.expect("purchase.order.line", "fields_get", {field: {"type": "many2one"}} if field else {})
+def unit_of_measure(script: Script, field: str = "product_uom_id", *, readonly: bool = False) -> Script:
+    """What the backend asks once before its first purchase order: the line's fields, then the reference
+    unit by its English name. `field=""` is a line with no many2one to `uom.uom`."""
+    fields: dict[str, Any] = {
+        "name": {"type": "text"},
+        "product_uom_category_id": {"type": "many2one", "relation": "uom.category", "readonly": True},
+    }
+    if field:
+        fields[field] = {"type": "many2one", "relation": "uom.uom", "readonly": readonly}
+    script.expect("purchase.order.line", "fields_get", fields)
     if not field:
         return script
-    if readable_xmlid:
-        return script.expect("ir.model.data", "search_read", [{"id": 90, "res_id": 1}])
-    script.expect("ir.model.data", "search_read", [])
     return script.expect("uom.uom", "search_read", [{"id": 1, "name": "Units"}])

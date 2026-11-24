@@ -79,6 +79,10 @@ _PARTNER_FIELDS = [
     "write_date",
 ]
 _AGREEMENT_FIELDS = ["name", "reference", "vendor_id", "date_start", "date_end", "currency_id", "description"]
+# The unit field of a purchase order line, by the names the Odoo versions are known to use (first found wins).
+_UNIT_FIELDS = ("product_uom_id", "product_uom", "uom_id")
+# Odoo's reference unit, by its English name ("Units"; "Unit" in some versions).
+_REFERENCE_UNIT_NAMES = ("Units", "Unit")
 _ORDER_FIELDS = ["partner_id", "requisition_id", "note", "currency_id", "state", "date_planned", "create_date"]
 _LINE_FIELDS = ["name", "product_qty", "price_unit"]
 #: Odoo's order states in which a purchase request is still a request: nothing is ordered.
@@ -593,31 +597,39 @@ class OdooPurchasing:
     async def _unit_of_measure(self) -> tuple[str, int]:
         """The field a purchase order line keeps its unit in, and Odoo's reference unit ("Units"). A line
         without a product has no unit to derive: Odoo 19 accepts it, Odoo 20 fails on it with `Expected
-        singleton: uom.uom()` (the core's purchasing night, 2026-11-24). The unit is set on every line, by
-        the field this version has (`product_uom_id`, else `product_uom`). Asked once, of Odoo."""
+        singleton: uom.uom()` (the core's purchasing night, 2026-11-24). The unit is set on every line.
+
+        The field is the line's many-to-one to `uom.uom`, preferring the names the versions are known to use
+        (`fields_get` without a filter: Odoo 20 names it neither `product_uom_id` nor `product_uom`). The
+        unit is read in `uom.uom` by its English name; `ir.model.data` needs the "Access Rights" group, which
+        the integration user does not hold (the night of 2026-11-24, run 45479922075). Asked once."""
         if self._line_unit is None:
             fields = await self.rpc.call(
-                "purchase.order.line", "fields_get", allfields=["product_uom_id", "product_uom"], attributes=["type"]
+                "purchase.order.line", "fields_get", attributes=["type", "relation", "readonly"]
             )
             known = fields if isinstance(fields, dict) else {}
-            field = next((name for name in ("product_uom_id", "product_uom") if name in known), None)
+            to_unit = {
+                name: spec
+                for name, spec in known.items()
+                if isinstance(spec, dict) and spec.get("type") == "many2one" and spec.get("relation") == "uom.uom"
+            }
+            preferred = [name for name in _UNIT_FIELDS if name in to_unit]
+            writable = sorted(name for name, spec in to_unit.items() if not spec.get("readonly"))
+            field = (preferred or writable or [None])[0]
             if field is None:
-                raise BackendError("odoo's purchase order line has no unit of measure field this backend knows")
-            reference = await self._search_read(
-                "ir.model.data",
-                [["module", "=", "uom"], ["name", "=", "product_uom_unit"], ["model", "=", "uom.uom"]],
-                ["res_id"],
+                raise BackendError("odoo's purchase order line has no unit of measure field (no many2one to uom.uom)")
+            named = await self.rpc.call(
+                "uom.uom",
+                "search_read",
+                domain=[["name", "in", list(_REFERENCE_UNIT_NAMES)]],
+                fields=["name"],
                 order="id asc",
                 limit=1,
+                context={"lang": "en_US"},
             )
-            if reference:
-                unit = int(reference[0]["res_id"])
-            else:  # a user who may not read external identifiers: the reference unit by its name
-                named = await self._search_read("uom.uom", [["name", "=", "Units"]], ["name"], order="id asc", limit=1)
-                if not named:
-                    raise BackendError('odoo has no reference unit of measure (`uom.product_uom_unit`, "Units")')
-                unit = int(named[0]["id"])
-            self._line_unit = (field, unit)
+            if not isinstance(named, list) or not named:
+                raise BackendError('odoo has no reference unit of measure named "Units"')
+            self._line_unit = (field, int(named[0]["id"]))
         return self._line_unit
 
     async def _currency_id(self, code: str) -> int:

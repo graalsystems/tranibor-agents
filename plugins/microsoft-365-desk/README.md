@@ -13,7 +13,7 @@ answered in the original thread:
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `microsoft-365-desk` 0.1.1, core `>=0.28.0,<1.0.0` (the first core with `webhook.forward_authorization`, ADR 0198) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `microsoft-365-desk` 0.1.2, core `>=0.28.0,<1.0.0` (the first core with `webhook.forward_authorization`, ADR 0198) |
 | Server | [`servers/desk.yaml`](servers/desk.yaml), [`server/`](server) | the MCP server `desk`: a plugin tracker (`implements: [tracker]`), its `reply`, and its `fake` |
 | Tracker profile | [`server/TRACKER_PROFILE.md`](server/TRACKER_PROFILE.md) | keys, every tool's mapping, idempotence |
 | Procedure | [`procedures/connector.mcp.microsoft-365-desk.md`](procedures/connector.mcp.microsoft-365-desk.md) | the Entra application, the mailbox's RBAC scope, the Azure Bot, the Teams app |
@@ -22,7 +22,7 @@ answered in the original thread:
 
 ```sh
 tranibor plugin validate plugins/microsoft-365-desk
-tranibor plugin pack plugins/microsoft-365-desk -o microsoft-365-desk-0.1.1.tar.gz   # same bytes every time
+tranibor plugin pack plugins/microsoft-365-desk -o microsoft-365-desk-0.1.2.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -152,7 +152,7 @@ thread.
 ## The server
 
 `server/` is a Python 3.12 package (`choregos_m365_desk`): MCP over streamable HTTP (stateless, JSON
-responses) at `/mcp` behind the platform's bearer token (`CHOREGOS_SERVER_TOKEN`), `/healthz` open.
+responses) at `/mcp` behind the platform's bearer token (`TRANIBOR_SERVER_TOKEN`), `/healthz` open.
 `M365_DESK_FAKE=1` runs it on a seeded in-memory tenant (`fake.py`): Entra, Graph (the shared mailbox
 with three messages — plain, HTML, already taken — and a Teams thread), the Bot Framework's keys (a test
 issuer with its own RSA key) and the Bot Connector, which records replies. The platform runs the fake with

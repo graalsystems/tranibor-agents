@@ -18,7 +18,7 @@ BEARER = {"Authorization": f"Bearer {TOKEN}"}
 #: The Host the platform's Service gives the server: not localhost, and accepted.
 BASE = "http://purchasing.choregos-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
-FAKE_ENV = {"PURCHASING_FAKE": "1", "CHOREGOS_SERVER_TOKEN": TOKEN}
+FAKE_ENV = {"PURCHASING_FAKE": "1", "TRANIBOR_SERVER_TOKEN": TOKEN}
 
 
 @pytest.fixture
@@ -83,15 +83,33 @@ def test_a_bank_detail_is_refused_over_http_too(http: TestClient) -> None:
 
 
 def test_without_the_platforms_token_the_server_refuses_to_start() -> None:
-    for env in ({"PURCHASING_FAKE": "1"}, {"PURCHASING_FAKE": "1", "CHOREGOS_SERVER_INSECURE_DEV": "true"}):
-        with pytest.raises(ValueError, match="CHOREGOS_SERVER_TOKEN"):
+    for env in ({"PURCHASING_FAKE": "1"}, {"PURCHASING_FAKE": "1", "TRANIBOR_SERVER_INSECURE_DEV": "true"}):
+        with pytest.raises(ValueError, match="TRANIBOR_SERVER_TOKEN"):
             build_app(Settings.from_env(env))
 
 
-def test_insecure_dev_runs_the_fake_without_a_token() -> None:
-    settings = Settings.from_env({"PURCHASING_FAKE": "1", "CHOREGOS_SERVER_INSECURE_DEV": "1"})
+@pytest.mark.parametrize("variable", ["TRANIBOR_SERVER_INSECURE_DEV", "CHOREGOS_SERVER_INSECURE_DEV"])
+def test_insecure_dev_runs_the_fake_without_a_token(variable: str) -> None:
+    settings = Settings.from_env({"PURCHASING_FAKE": "1", variable: "1"})
     with TestClient(build_app(settings), base_url=BASE) as client:
         assert _call(client, {}, supplier_id="SUP-0001") == 200
+
+
+@pytest.mark.parametrize("variable", ["TRANIBOR_SERVER_TOKEN", "CHOREGOS_SERVER_TOKEN"])
+def test_the_token_comes_from_the_current_core_s_variable_or_an_older_core_s(variable: str) -> None:
+    """The core gives the pod `TRANIBOR_SERVER_TOKEN` since its rename (core ADR 0176); an older core,
+    `CHOREGOS_SERVER_TOKEN`. Reading only the older name, the server refused to start on core 0.29.0
+    (graalsystems/tranibor-agents#35, as servicenow 0.2.4 did on the Diametral dev cluster)."""
+    with TestClient(build_app(Settings.from_env({"PURCHASING_FAKE": "1", variable: TOKEN})), base_url=BASE) as client:
+        assert _call(client, BEARER, supplier_id="SUP-0001") == 200
+        assert _call(client, {"Authorization": f"Bearer {TOKEN}x"}, supplier_id="SUP-0001") == 401
+
+
+def test_the_current_core_s_variable_wins_over_an_older_core_s() -> None:
+    env = {"PURCHASING_FAKE": "1", "TRANIBOR_SERVER_TOKEN": TOKEN, "CHOREGOS_SERVER_TOKEN": "stale"}
+    with TestClient(build_app(Settings.from_env(env)), base_url=BASE) as client:
+        assert _call(client, BEARER, supplier_id="SUP-0001") == 200
+        assert _call(client, {"Authorization": "Bearer stale"}, supplier_id="SUP-0001") == 401
 
 
 def test_odoo_starts_the_server_without_opening_a_connection() -> None:
@@ -147,7 +165,7 @@ def test_the_database_is_optional_and_no_other_backend_than_the_listed_ones_star
 )
 def test_the_fake_is_not_a_backend_an_administrator_can_pick(env: dict[str, str], message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        Settings.from_env({**env, "CHOREGOS_SERVER_TOKEN": TOKEN})
+        Settings.from_env({**env, "TRANIBOR_SERVER_TOKEN": TOKEN})
 
 
 def test_an_unknown_scene_is_refused() -> None:

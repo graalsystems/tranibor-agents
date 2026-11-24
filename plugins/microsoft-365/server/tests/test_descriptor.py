@@ -111,9 +111,9 @@ def test_the_declared_fake_is_what_switches_the_server_to_its_fake_and_no_admini
     d = descriptor()
     assert d["fake"] == {"env": {"M365_FAKE": "1"}, "scenes": ["default"]}
     variables = set(d["fake"]["env"])
-    assert not {name for name in variables if name.startswith("CHOREGOS_")}
+    assert not {name for name in variables if name.startswith(("TRANIBOR_", "CHOREGOS_"))}
     reached = {p.get("x-env", name.upper()) for name, p in d["config_schema"]["properties"].items()}
     assert not variables & reached
-    as_the_platform_runs_it = {**d["fake"]["env"], "CHOREGOS_SERVER_TOKEN": "the-platform-s-token"}
+    as_the_platform_runs_it = {**d["fake"]["env"], "TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}
     with TestClient(build_app(Settings.from_env(as_the_platform_runs_it))) as client:
         assert client.get("/healthz").json()["fake"] is True

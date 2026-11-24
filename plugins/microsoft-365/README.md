@@ -5,14 +5,14 @@ their delegated permissions only. It is generic: any assistant binds a need to i
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `microsoft-365` 0.1.4, core `>=0.26.0,<1.0.0` (the first core that sends a plugin's server the person's `user_consent` token, ADR 0135) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `microsoft-365` 0.1.5, core `>=0.26.0,<1.0.0` (the first core that sends a plugin's server the person's `user_consent` token, ADR 0135) |
 | Server | [`servers/microsoft-365.yaml`](servers/microsoft-365.yaml), [`server/`](server) | three reads over Graph, and its `fake` for the eval matrix |
 | Procedure | [`procedures/connector.mcp.microsoft-365.md`](procedures/connector.mcp.microsoft-365.md) | the Entra application, its consent, the connector's `user_consent` settings |
 | Entra check | [`server/entra/`](server/entra), `python -m choregos_microsoft_365.entra` | the reference application of each stage, and the check that an application asks exactly its stage's permissions |
 
 ```sh
 tranibor plugin validate plugins/microsoft-365
-tranibor plugin pack plugins/microsoft-365 -o microsoft-365-0.1.4.tar.gz   # same bytes every time
+tranibor plugin pack plugins/microsoft-365 -o microsoft-365-0.1.5.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -22,7 +22,7 @@ tranibor plugin pack plugins/microsoft-365 -o microsoft-365-0.1.4.tar.gz   # sam
 The connector declares `identity_modes: [user_consent]`: each person connects their own Microsoft 365
 account once in the console (`/me/connected-accounts`), the platform seals the refresh token in their
 personal space and draws an access token for each call. It sends that token to the server in
-`X-Choregos-User-Token`, next to the platform's own bearer token (`CHOREGOS_SERVER_TOKEN`), which
+`X-Choregos-User-Token`, next to the platform's own bearer token (`TRANIBOR_SERVER_TOKEN`), which
 authenticates Tranibor to the server.
 
 - The person's token is the only credential the server sends to Graph, and only to
@@ -80,5 +80,5 @@ person's token on the fake.
 cd plugins/microsoft-365/server
 uv sync --all-extras --dev
 uv run ruff check . && uv run mypy --strict src && uv run pytest -q
-M365_FAKE=1 CHOREGOS_SERVER_INSECURE_DEV=1 uv run choregos-microsoft-365   # local demo, port 8080
+M365_FAKE=1 TRANIBOR_SERVER_INSECURE_DEV=1 uv run choregos-microsoft-365   # local demo, port 8080
 ```

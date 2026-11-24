@@ -107,24 +107,24 @@ def test_the_rest_of_the_descriptor() -> None:
 def test_the_declared_fake_is_what_switches_the_server_to_its_fake_and_no_administrator_reaches_it() -> None:
     """`fake` (core #1372): the platform runs an eval instance of the image with exactly these variables and its
     own token, nothing of the configuration. They switch the server to its seeded instance; none is the
-    platform's (`CHOREGOS_*`) nor one a configuration field reaches."""
+    platform's (`TRANIBOR_*`, `CHOREGOS_*`) nor one a configuration field reaches."""
     d = descriptor()
     assert d["fake"] == {"env": {"PURCHASING_FAKE": "1"}, "scenes": list(SCENES)}
     variables = set(d["fake"]["env"])
-    assert not {name for name in variables if name.startswith("CHOREGOS_")}
+    assert not {name for name in variables if name.startswith(("TRANIBOR_", "CHOREGOS_"))}
     assert not variables & {p["x-env"] for p in d["config_schema"]["properties"].values()}
     assert "PURCHASING_FAKE_SCENE" not in {p["x-env"] for p in d["config_schema"]["properties"].values()}
-    as_the_platform_runs_it = {**d["fake"]["env"], "CHOREGOS_SERVER_TOKEN": "the-platform-s-token"}
+    as_the_platform_runs_it = {**d["fake"]["env"], "TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}
     with TestClient(build_app(Settings.from_env(as_the_platform_runs_it))) as client:
         assert client.get("/healthz").json()["fake"] is True
     # Without them, the same environment is a real instance nobody configured: it refuses to start.
     with pytest.raises(ValueError, match="PURCHASING_BACKEND"):
-        build_app(Settings.from_env({"CHOREGOS_SERVER_TOKEN": "the-platform-s-token"}))
+        build_app(Settings.from_env({"TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}))
 
 
 @pytest.mark.parametrize("scene", SCENES)
 def test_every_declared_scene_starts_on_exactly_the_fake_env_plus_the_token(scene: str) -> None:
     d = descriptor()
     assert scene in d["fake"]["scenes"]
-    env = {**d["fake"]["env"], "CHOREGOS_SERVER_TOKEN": "t", "PURCHASING_FAKE_SCENE": scene}
+    env = {**d["fake"]["env"], "TRANIBOR_SERVER_TOKEN": "t", "PURCHASING_FAKE_SCENE": scene}
     assert Settings.from_env(env).scene == scene

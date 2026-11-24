@@ -87,9 +87,10 @@ fake:
   scenes: [default]             # the scenes that fake serves (`default` when absent)
 ```
 
-None of its variables may be `CHOREGOS_*` or one that `config_schema` or `secret_fields` reaches
+None of its variables may be `TRANIBOR_*`, `CHOREGOS_*` or one that `config_schema` or `secret_fields` reaches
 (`validate` refuses both), so no administrator switches a server to its fake. The server must start on its
-fake with exactly these variables plus the platform's token, `CHOREGOS_SERVER_TOKEN`, and nothing of its
+fake with exactly these variables plus the platform's token, `TRANIBOR_SERVER_TOKEN` (`CHOREGOS_SERVER_TOKEN` from a
+core before the rename: a server reads both, `tests/test_server_token.py`), and nothing of its
 configuration: that is how the platform starts it.
 
 How the core's matrix plays them:

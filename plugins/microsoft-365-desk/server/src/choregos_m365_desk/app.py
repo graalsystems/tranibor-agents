@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The HTTP server: MCP (streamable HTTP, stateless) at `/mcp`, `GET /healthz`, and `POST /events`.
 
-Every path but `/healthz` needs `Authorization: Bearer $CHOREGOS_SERVER_TOKEN`, the token the platform
+Every path but `/healthz` needs `Authorization: Bearer $TRANIBOR_SERVER_TOKEN`, the token the platform
 presents on each call (ADR 0094); the comparison is constant-time.
 
 The platform hands a Bot Connector delivery to `tracker_parse_event` over `/mcp`, with the delivery's own
@@ -257,7 +257,7 @@ def build_app(
     if token is not None:
         app.add_middleware(BearerGuard, token=token.get_secret_value())
     else:
-        log.warning("insecure_dev", reason="no CHOREGOS_SERVER_TOKEN: every call is accepted (fake tenant only)")
+        log.warning("insecure_dev", reason="no TRANIBOR_SERVER_TOKEN: every call is accepted (fake tenant only)")
     app.state.runtime = runtime
     app.state.mcp = server
     return app

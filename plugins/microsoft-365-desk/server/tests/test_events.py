@@ -244,7 +244,7 @@ async def test_the_platforms_door_events_answers_as_the_tool() -> None:
     from choregos_m365_desk.config import Settings
 
     fake = FakeMicrosoft()
-    settings = Settings.from_env({"M365_DESK_FAKE": "1", "CHOREGOS_SERVER_TOKEN": "t"})
+    settings = Settings.from_env({"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_TOKEN": "t"})
     with TestClient(build_app(settings, fake=fake), headers={"Authorization": "Bearer t"}) as client:
         good = client.post("/events", json=delivery(fake.issuer.mint(), activity()))
         assert (good.status_code, good.json()["events"][0]["item_key"]) == (200, ROOT)

@@ -114,7 +114,7 @@ async def kube(platform: Platform, tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("TRANIBOR_PLUGIN_FILES_DIR", str(tmp_path / "plugin-files"))
     reset_settings_cache()
     root = tmp_path / "plugins"
-    target = root / "microsoft-365-desk" / "0.1.1"
+    target = root / "microsoft-365-desk" / "0.1.2"
     shutil.copytree(
         PLUGIN_DIR, target, ignore=shutil.ignore_patterns(".venv", "__pycache__", "*.zip", "uv.lock")
     )
@@ -174,7 +174,7 @@ async def _organisation(platform: Platform, kube: Any, teams: bool = False) -> O
     assert created.status_code == 201, created.text
 
     asked = await client.post(
-        f"{ORG}/plugins/install", json={"source": "offline", "name": "microsoft-365-desk", "version": "0.1.1"}
+        f"{ORG}/plugins/install", json={"source": "offline", "name": "microsoft-365-desk", "version": "0.1.2"}
     )
     assert asked.status_code == 202, asked.text
     await _member(client, SECOND, "org_admin")
@@ -198,7 +198,7 @@ async def _organisation(platform: Platform, kube: Any, teams: bool = False) -> O
     assert desk["status"] == "deployed", desk
 
     server = OnItsFake(
-        build_app(Settings.from_env({"M365_DESK_FAKE": "1", "CHOREGOS_SERVER_TOKEN": _token(kube)}))
+        build_app(Settings.from_env({"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_TOKEN": _token(kube)}))
     )
     use_plugin_transport(server)
 

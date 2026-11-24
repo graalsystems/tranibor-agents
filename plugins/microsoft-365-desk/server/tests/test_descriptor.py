@@ -123,12 +123,12 @@ def test_the_declared_fake_is_what_switches_the_server_to_its_fake_and_no_admini
     variables = set(d["fake"]["env"])
     assert not {name for name in variables if name.startswith(("CHOREGOS_", "TRANIBOR_"))}
     assert not variables & {p["x-env"] for p in d["config_schema"]["properties"].values()}
-    as_the_platform_runs_it = {**d["fake"]["env"], "CHOREGOS_SERVER_TOKEN": "the-platform-s-token"}
+    as_the_platform_runs_it = {**d["fake"]["env"], "TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}
     with TestClient(build_app(Settings.from_env(as_the_platform_runs_it))) as client:
         assert client.get("/healthz").json()["fake"] is True
     # Without them, the same environment is a real tenant nobody configured: it refuses to start.
     with pytest.raises(ValueError, match="M365_DESK_TENANT_ID"):
-        build_app(Settings.from_env({"CHOREGOS_SERVER_TOKEN": "the-platform-s-token"}))
+        build_app(Settings.from_env({"TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}))
 
 
 def test_the_plugin_requires_the_first_core_that_forwards_authorization() -> None:

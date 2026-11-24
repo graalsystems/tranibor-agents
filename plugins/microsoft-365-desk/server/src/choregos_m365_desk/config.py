@@ -10,9 +10,13 @@ application's credentials at another host. The one exception is the Bot Connecto
 must stay on `smba.trafficmanager.net` (the egress the declaration allows).
 
 `M365_DESK_FAKE=1` replaces Microsoft 365 with a seeded in-memory tenant (`fake.py`), so tests and demos
-need no account. `CHOREGOS_SERVER_TOKEN` is the platform's (ADR 0094): the bearer token it presents on
+need no account. `TRANIBOR_SERVER_TOKEN` is the platform's (ADR 0094): the bearer token it presents on
 every call. The server refuses to start without it, except on the fake tenant with
-`CHOREGOS_SERVER_INSECURE_DEV=1` said explicitly, for a local demo.
+`TRANIBOR_SERVER_INSECURE_DEV=1` said explicitly, for a local demo.
+
+The core names the pod's variable `TRANIBOR_SERVER_TOKEN` since its `TRANIBOR_*` rename (core ADR 0176,
+S75-04); an older core sets `CHOREGOS_SERVER_TOKEN`, still read when the new name is absent (and
+`CHOREGOS_SERVER_INSECURE_DEV` likewise).
 """
 
 from __future__ import annotations
@@ -24,6 +28,16 @@ from collections.abc import Mapping
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
+
+#: The platform's token variable, the current core's name first, then an older core's.
+TOKEN_ENVS = ("TRANIBOR_SERVER_TOKEN", "CHOREGOS_SERVER_TOKEN")
+INSECURE_DEV_ENVS = ("TRANIBOR_SERVER_INSECURE_DEV", "CHOREGOS_SERVER_INSECURE_DEV")
+
+
+def _first(source: Mapping[str, str], names: tuple[str, ...]) -> str:
+    """The value of the first of `names` set to something, else empty."""
+    return next((source[name] for name in names if source.get(name)), "")
+
 
 GRAPH_URL = "https://graph.microsoft.com/v1.0"
 LOGIN_URL = "https://login.microsoftonline.com"
@@ -97,7 +111,7 @@ class Settings(BaseModel):
     port: int = 8080
     #: The bearer token the platform presents on every call but the health probe (ADR 0094).
     server_token: SecretStr | None = None
-    #: `CHOREGOS_SERVER_INSECURE_DEV=1`: no token, accepted on the fake tenant only.
+    #: `TRANIBOR_SERVER_INSECURE_DEV=1`: no token, accepted on the fake tenant only.
     insecure_dev: bool = False
 
     @model_validator(mode="after")
@@ -145,17 +159,18 @@ class Settings(BaseModel):
         if self.fake and self.insecure_dev:
             return None
         raise ValueError(
-            "CHOREGOS_SERVER_TOKEN is not set: the server refuses to start without the platform's token "
-            "(only M365_DESK_FAKE=1 with CHOREGOS_SERVER_INSECURE_DEV=1 runs without it)"
+            "TRANIBOR_SERVER_TOKEN (or an older core's CHOREGOS_SERVER_TOKEN) is not set: the server refuses "
+            "to start without the platform's token (only M365_DESK_FAKE=1 with TRANIBOR_SERVER_INSECURE_DEV=1 runs "
+            "without it)"
         )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
         source = os.environ if env is None else env
         port = int(source.get("PORT", "8080"))
-        token = source.get("CHOREGOS_SERVER_TOKEN")
+        token = _first(source, TOKEN_ENVS)
         server_token = SecretStr(token) if token else None
-        insecure_dev = source.get("CHOREGOS_SERVER_INSECURE_DEV", "") == "1"
+        insecure_dev = _first(source, INSECURE_DEV_ENVS) == "1"
         if source.get("M365_DESK_FAKE", "") in ("1", "true", "yes"):
             # The fake tenant only: nothing of a real configuration is read, so none can leak into it.
             return cls(

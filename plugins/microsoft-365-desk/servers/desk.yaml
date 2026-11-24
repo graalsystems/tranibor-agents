@@ -9,7 +9,7 @@ name: desk
 image: ghcr.io/graalsystems/tranibor-agents/microsoft-365-desk-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
 port: 8080
 protocol: mcp-http
-# MCP at /mcp, behind the platform's bearer token (CHOREGOS_SERVER_TOKEN); the health probe stays open.
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
 paths: {mcp: /mcp, health: /healthz}
 
 # What an administrator types when installing the plugin. Each property reaches the server as the
@@ -138,7 +138,7 @@ webhook:
 
 # How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
 # switches it to its seeded in-memory tenant (server/src/choregos_m365_desk/fake.py), which no
-# configuration field reaches. The platform adds its own token (CHOREGOS_SERVER_TOKEN) and nothing of the
+# configuration field reaches. The platform adds its own token (TRANIBOR_SERVER_TOKEN) and nothing of the
 # configuration.
 fake:
   env: {M365_DESK_FAKE: "1"}

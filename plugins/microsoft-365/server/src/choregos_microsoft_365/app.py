@@ -3,7 +3,7 @@
 
 Two tokens, two jobs:
 
-- `Authorization: Bearer $CHOREGOS_SERVER_TOKEN` authenticates the platform (ADR 0094). Every path but
+- `Authorization: Bearer $TRANIBOR_SERVER_TOKEN` authenticates the platform (ADR 0094). Every path but
   `/healthz` needs it; the comparison is constant-time.
 - `X-Choregos-User-Token` is the token of the person the call is made for: the platform's connected
   account of that person (`user_consent`, the core's ADR 0135), drawn for this call only. It is the only
@@ -232,7 +232,7 @@ def build_app(
     if token is not None:
         app.add_middleware(BearerGuard, token=token.get_secret_value())
     else:
-        log.warning("insecure_dev", reason="no CHOREGOS_SERVER_TOKEN: every call is accepted (fake tenant only)")
+        log.warning("insecure_dev", reason="no TRANIBOR_SERVER_TOKEN: every call is accepted (fake tenant only)")
     app.state.runtime = runtime
     app.state.mcp = server
     return app

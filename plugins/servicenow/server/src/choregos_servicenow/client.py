@@ -4,15 +4,20 @@
 - Authentication: OAuth 2.0 client credentials (`/oauth_token.do`, the token cached until shortly before
   it expires, renewed once on a 401) or basic authentication of a dedicated integration user.
 - Every read names its fields (`sysparm_fields`) and asks for `sysparm_display_value=all`, so a
-  reference comes back with both its sys_id and its label; at most `MAX_ROWS` rows.
+  reference comes back with both its sys_id and its label; at most `MAX_ROWS` rows a call. `read` pages
+  (`sysparm_offset`) up to a bound its caller sets, and says how many rows the instance holds
+  (`X-Total-Count`) and whether the bound cut the answer.
 - Only the tables of `tables.py`; a query is always built from typed filters (`query.py`).
+- A change request's state moves through the Change Management API (`/api/sn_chg_rest/change`), along
+  the transitions its change model reaches from its current state: the Table API's write of `state` is
+  refused by the model's Business Rule (`Change Model: Check State Transition`, an Australia PDI).
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -60,6 +65,16 @@ log = structlog.get_logger("choregos_servicenow.client")
 class _Token:
     value: str
     expires_at: float
+
+
+@dataclass
+class Rows:
+    """What `read` found: the rows, how many the instance holds (`X-Total-Count`, `None` when it does not
+    say), and whether the bound cut the answer."""
+
+    rows: list[dict[str, Any]] = field(default_factory=list)
+    total: int | None = None
+    truncated: bool = False
 
 
 def normalise(table: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -132,6 +147,12 @@ class ServiceNowClient:
             return self._token.value
 
     async def _request(self, method: str, path: str, *, params: dict[str, str] | None = None, json: Any = None) -> Any:
+        response = await self._response(method, path, params=params, json=json)
+        return response.json().get("result") if response.content else None
+
+    async def _response(
+        self, method: str, path: str, *, params: dict[str, str] | None = None, json: Any = None
+    ) -> httpx.Response:
         for attempt in (0, 1):
             # Stateless: every call authenticates on its own, with no session cookie of an earlier one.
             # On the Australia PDI behind the platform, a call that sent back the session cookies
@@ -151,7 +172,7 @@ class ServiceNowClient:
                 continue
             if response.status_code >= 400:
                 raise ServiceNowError(_error_message(response), response.status_code)
-            return response.json().get("result") if response.content else None
+            return response
         raise ServiceNowError("ServiceNow refused the renewed token", 401)  # pragma: no cover
 
     # ─────────────────────────── table access ───────────────────────────
@@ -164,6 +185,29 @@ class ServiceNowClient:
         fields: list[str] | None = None,
         limit: int = MAX_ROWS,
     ) -> list[dict[str, Any]]:
+        return (await self._page(table, query, fields=fields, limit=limit, offset=0)).rows
+
+    async def read(self, table: str, query: Query, *, fields: list[str] | None = None, bound: int = MAX_ROWS) -> Rows:
+        """Up to `bound` rows, in pages of `MAX_ROWS` (`sysparm_offset`); `truncated` when the instance
+        holds more than were read."""
+        found = Rows()
+        bound = max(1, bound)
+        while len(found.rows) < bound:
+            wanted = min(MAX_ROWS, bound - len(found.rows))
+            page = await self._page(table, query, fields=fields, limit=wanted, offset=len(found.rows))
+            found.rows.extend(page.rows)
+            found.total = page.total
+            if len(page.rows) < wanted or (page.total is not None and len(found.rows) >= page.total):
+                break
+        if found.total is not None:
+            found.truncated = found.total > len(found.rows)
+        else:  # the instance did not say: a bound reached on a full page may have cut the answer
+            found.truncated = len(found.rows) >= bound
+        if found.truncated:
+            log.info("table_read_truncated", table=table, rows=len(found.rows), total=found.total, bound=bound)
+        return found
+
+    async def _page(self, table: str, query: Query, *, fields: list[str] | None, limit: int, offset: int) -> Rows:
         check_table(table)
         assert query.table == table
         params = {
@@ -173,9 +217,12 @@ class ServiceNowClient:
             "sysparm_exclude_reference_link": "true",
             "sysparm_limit": str(max(1, min(limit, MAX_ROWS))),
         }
-        result = await self._request("GET", f"/api/now/table/{table}", params=params)
-        log.info("table_read", table=table, rows=len(result or []))
-        return [normalise(table, row) for row in result or []]
+        if offset:
+            params["sysparm_offset"] = str(offset)
+        response = await self._response("GET", f"/api/now/table/{table}", params=params)
+        result = (response.json().get("result") if response.content else None) or []
+        log.info("table_read", table=table, rows=len(result), offset=offset)
+        return Rows([normalise(table, row) for row in result], _total(response))
 
     async def get(self, table: str, sys_id: str, *, fields: list[str] | None = None) -> dict[str, Any]:
         check_table(table)
@@ -218,6 +265,33 @@ class ServiceNowClient:
         record = normalise(table, result or {})
         _check_applied(table, values, record)
         log.info("record_updated", table=table, sys_id=sys_id, fields=sorted(values))
+        return record
+
+    # ─────────────────────────── change requests ───────────────────────────
+
+    async def change_next_states(self, sys_id: str, current: str) -> dict[str, str]:
+        """`{value: label}` of the states a change request's model lets it move to from `current`, its
+        state (`GET /api/sn_chg_rest/change/{sys_id}/nextstates`: the instance evaluates the model's
+        transitions and their conditions)."""
+        check_sys_id(sys_id)
+        result = await self._request("GET", f"/api/sn_chg_rest/change/{sys_id}/nextstates") or {}
+        labels = {str(k): str(v) for k, v in (result.get("state_label") or {}).items()}
+        known = await self.choices("change_request")
+        return {
+            str(v): known.get(str(v)) or labels.get(str(v)) or str(v)
+            for v in result.get("available_states") or []
+            if str(v) != str(current)
+        }
+
+    async def update_change(self, sys_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        """A change request's fields, its state included, written through the Change Management API
+        (`PATCH /api/sn_chg_rest/change/{sys_id}`), then read back on the Table API and checked as `update`
+        checks a write: its answer's shape is not relied on."""
+        check_sys_id(sys_id)
+        await self._request("PATCH", f"/api/sn_chg_rest/change/{sys_id}", json=values)
+        record = await self.get("change_request", sys_id)
+        _check_applied("change_request", values, record)
+        log.info("change_updated", sys_id=sys_id, fields=sorted(values))
         return record
 
     async def journal_display(self, table: str, sys_id: str, elements: tuple[str, ...]) -> dict[str, Any]:
@@ -299,6 +373,13 @@ def _check_applied(table: str, values: dict[str, Any], record: dict[str, Any]) -
     if kept:
         log.warning("write_not_applied", table=table, sys_id=record.get("sys_id"), fields=sorted(kept))
         raise NotApplied(table, kept)
+
+
+def _total(response: httpx.Response) -> int | None:
+    try:
+        return int(response.headers["X-Total-Count"])
+    except (KeyError, ValueError):
+        return None
 
 
 def _error_message(response: httpx.Response) -> str:

@@ -111,6 +111,11 @@ Output: `{"key": "INC0010003", "changed": true, "state": "On Hold", "ignored": [
   Complete…) is refused: use `tracker_close`.
 - ServiceNow has no labels: `label` and `remove_labels` are accepted and reported in `ignored`.
 - Without `status`, nothing changes. Setting the current state answers `"changed": false`.
+- A **change request** moves through the Change Management API (`PATCH /api/sn_chg_rest/change/{sys_id}`),
+  only to a state its change model reaches from the current one (`GET …/nextstates`); any other is refused
+  before anything is written, the refusal naming the states it reaches. The Table API's write of a
+  change's `state` is refused by the model's Business Rule (`Change Model: Check State Transition`).
+  Incidents and request items stay on the Table API.
 
 ## `tracker_comment`
 
@@ -143,6 +148,10 @@ Output: `{"key": "INC0010011", "closed": true, "state": "Resolved"}`
 | sc_req_item | Closed Complete | a work note with the notes |
 | change_request | Closed | `close_code` (default `successful`), `close_notes` |
 
+A change request closes through the Change Management API, from a state its model closes from (Review,
+after its approvals); from any other state the close is refused, naming the states the model reaches: no
+close walks a change past its approvals.
+
 Idempotent: an item already in a closing state answers `"closed": false`. The work item template puts
 a person's review before the stage that closes; `resolve_incident`, the agent's own path, always needs a
 person.
@@ -151,12 +160,15 @@ person.
 
 Input: `{"tables": ["incident", "sc_req_item", "change_request"], "limit": 50}` (both optional)
 
-Output: `{"keys": ["INC0010011", "INC0010001", "RITM0010001"]}`
+Output: `{"keys": ["INC0010011", "INC0010001", "RITM0010001"], "total": 3, "truncated": false}`
 
 Active items assigned to one of `SERVICENOW_ASSIGNMENT_GROUPS` (names or sys_ids), not in a closing state,
-per table in the order given, oldest first within a table; at most 50 keys. Without a configured group:
-`{"keys": [], "reason": "no assignment group configured"}`. This is the polling path for instances that
-send no events.
+the most recently updated first across the tables; at most `limit` keys (default 50, bounded by 200, the
+contract's maximum). Each table is read in pages of 50 (`sysparm_offset`) up to that bound, so a new item
+is polled whatever waits behind it. `total` is how many the queue holds (the instance's `X-Total-Count`,
+absent when it does not say); `truncated: true` says the bound left some out (and the server logs
+`candidates_truncated`). Without a configured group: `{"keys": [], "reason": "no assignment group
+configured"}`. This is the polling path for instances that send no events.
 
 ## `tracker_parse_event`
 

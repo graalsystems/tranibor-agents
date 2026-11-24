@@ -4,8 +4,13 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
-from choregos_servicenow.fake import FakeServiceNow, sys_id_of
+import pytest
+
+from choregos_servicenow.app import Runtime
+from choregos_servicenow.errors import ServiceNowError
+from choregos_servicenow.fake import DATE_FORMAT, FakeServiceNow, sys_id_of
 
 from .conftest import Mcp
 
@@ -86,17 +91,22 @@ async def test_close_each_kind_of_item_once(mcp: Mcp, fake: FakeServiceNow) -> N
 
 async def test_list_candidates_reads_the_configured_queue(mcp: Mcp) -> None:
     result = await mcp.call("tracker_list_candidates")
-    # Service Desk (the fake's default queue): open incidents, then request items, each oldest first.
-    assert result["keys"] == [
-        "INC0010011",
-        "INC0010001",
-        "INC0010002",
-        "INC0010003",
-        "INC0010004",
-        "INC0010005",
-        "INC0012399",
-        "RITM0010001",
-    ]
+    # Service Desk (the fake's default queue): open incidents and request items, the most recently updated
+    # first across the tables.
+    assert result == {
+        "keys": [
+            "INC0012399",
+            "INC0010005",
+            "INC0010004",
+            "INC0010003",
+            "INC0010002",
+            "INC0010001",
+            "INC0010011",
+            "RITM0010001",
+        ],
+        "total": 8,
+        "truncated": False,
+    }
     only = await mcp.call("tracker_list_candidates", tables=["sc_req_item"])
     assert only["keys"] == ["RITM0010001"]
     assert "not a tracker table" in await mcp.error("tracker_list_candidates", tables=["problem"])
@@ -186,3 +196,92 @@ async def test_a_creation_whose_key_the_instance_dropped_says_so(mcp: Mcp, fake:
     fake.unwritable = set()
     kept = await mcp.call("tracker_create_item", title="Disk full", body="On db-prod-02.", action_key="k2")
     assert "idempotent" not in kept
+
+
+# ───── a change request moves along its change model (graalsystems/tranibor-agents#24) ─────
+
+
+async def _filed_change(mcp: Mcp) -> tuple[str, str]:
+    filed = await mcp.call(
+        "create_change_request", short_description="Reboot", description="d", implementation_plan="i",
+        backout_plan="b", test_plan="t", action_key="chg-model",
+    )  # fmt: skip
+    return str(filed["record"]["fields"]["number"]), str(filed["record"]["sys_id"])
+
+
+async def test_the_table_api_cannot_move_a_change(runtime: Runtime, fake: FakeServiceNow) -> None:
+    """What the Australia PDI answered to a Table API PATCH of a change's state (the fake plays it)."""
+    sys_id = sys_id_of("CHG0003311")
+    fake.tables["change_request"][sys_id]["state"] = "-5"
+    with pytest.raises(ServiceNowError, match=r"403.*Change Model: Check State Transition"):
+        await runtime.client.update("change_request", sys_id, {"state": "-4"})
+    assert fake.tables["change_request"][sys_id]["state"] == "-5"
+
+
+async def test_a_change_moves_through_the_change_management_api(mcp: Mcp, fake: FakeServiceNow) -> None:
+    key, sys_id = await _filed_change(mcp)
+    moved = await mcp.call("tracker_set_state", key=key, status="assess")
+    assert moved == {"key": key, "changed": True, "state": "Assess", "ignored": []}
+    assert fake.tables["change_request"][sys_id]["state"] == "-4"
+    writes = [r for r in fake.requests if r.method == "PATCH"]
+    assert [r.url.path for r in writes] == [f"/api/sn_chg_rest/change/{sys_id}"]
+    # A state the model does not reach from here is refused before any write, naming those it reaches.
+    refused = await mcp.error("tracker_set_state", key=key, status="Implement")
+    assert "not reachable" in refused and "Authorize" in refused and "Canceled" in refused, refused
+    assert len([r for r in fake.requests if r.method == "PATCH"]) == 1
+    # Incidents and request items keep the Table API.
+    await mcp.call("tracker_set_state", key="INC0010003", status="On Hold")
+    assert [r for r in fake.requests if r.method == "PATCH"][-1].url.path.startswith("/api/now/table/incident/")
+
+
+async def test_a_change_closes_from_review_through_the_change_management_api(mcp: Mcp, fake: FakeServiceNow) -> None:
+    key, sys_id = await _filed_change(mcp)
+    # From New, the model does not reach Closed: refused, and nothing written (no CAB is skipped).
+    refused = await mcp.error("tracker_close", key=key)
+    assert "not reachable" in refused and "Assess" in refused, refused
+    assert fake.tables["change_request"][sys_id]["state"] == "-5"
+    fake.tables["change_request"][sys_id]["state"] = "0"  # Review: its approvals happened on the instance
+    closed = await mcp.call("tracker_close", key=key, close_notes="Delivered.")
+    assert closed == {"key": key, "closed": True, "state": "Closed"}
+    row = fake.tables["change_request"][sys_id]
+    assert (row["state"], row["close_code"], row["close_notes"]) == ("3", "successful", "Delivered.")
+    assert [r for r in fake.requests if r.method == "PATCH"][-1].url.path == f"/api/sn_chg_rest/change/{sys_id}"
+    assert (await mcp.call("tracker_close", key=key))["closed"] is False
+
+
+# ───── the queue poll pages, and says when it stops (graalsystems/tranibor-agents#25) ─────
+
+
+def queue(fake: FakeServiceNow, count: int) -> list[str]:
+    """`count` open incidents in the Service Desk queue, updated a second apart, the last the newest."""
+    now = datetime.now(UTC).replace(microsecond=0)
+    numbers = []
+    for i in range(count):
+        stamp = (now - timedelta(seconds=count - i)).strftime(DATE_FORMAT)
+        number = f"INC003{i:04d}"
+        fake.insert("incident", {"number": number, "short_description": f"Queued {i}", "state": "1",
+                                 "active": "true", "assignment_group": sys_id_of("group:Service Desk"),
+                                 "sys_created_on": stamp, "sys_updated_on": stamp})  # fmt: skip
+        numbers.append(number)
+    return numbers
+
+
+async def test_the_queue_poll_reads_past_one_page(mcp: Mcp, fake: FakeServiceNow) -> None:
+    numbers = queue(fake, 80)
+    everything = await mcp.call("tracker_list_candidates", limit=200)
+    assert set(numbers) <= set(everything["keys"])
+    assert (everything["total"], everything["truncated"]) == (len(everything["keys"]), False)
+    offsets = [r.url.params.get("sysparm_offset") for r in fake.requests if r.url.path == "/api/now/table/incident"]
+    assert "50" in offsets, offsets
+
+
+async def test_the_queue_poll_says_when_its_bound_cut_it_and_serves_the_newest_first(
+    mcp: Mcp, fake: FakeServiceNow
+) -> None:
+    numbers = queue(fake, 80)
+    found = await mcp.call("tracker_list_candidates")  # the core asks for 50
+    assert len(found["keys"]) == 50
+    assert found["truncated"] is True and found["total"] >= 80
+    assert found["keys"][:3] == numbers[::-1][:3]  # a new incident is polled, whatever waits behind it
+    # The contract's bound: never more than 200 keys, whatever is asked.
+    assert len((await mcp.call("tracker_list_candidates", limit=500))["keys"]) <= 200

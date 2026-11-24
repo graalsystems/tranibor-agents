@@ -154,7 +154,8 @@ def build_server(runtime: Runtime) -> MCPServer:
     ) -> dict[str, Any]:
         """Search a table with typed filters (joined by AND) and free-text terms (each matched in the
         title or the description). Tables: incident, sc_req_item, change_request, problem, kb_knowledge,
-        cmdb_ci, cmdb_rel_ci, sys_user_group, sys_choice, sys_journal_field. At most 50 records."""
+        cmdb_ci, cmdb_rel_ci, sys_user_group, sys_choice, sys_journal_field. At most 50 records;
+        `total` is how many match, `truncated` says the cap left some out."""
         return await _run(
             "search_records", tools.search_records(table, filters, terms, order_by, descending, fields, limit)
         )
@@ -294,12 +295,15 @@ def build_server(runtime: Runtime) -> MCPServer:
 
     @server.tool()
     async def tracker_close(key: str, close_notes: str | None = None, close_code: str | None = None) -> dict[str, Any]:
-        """Close a delivered work item. Idempotent: closing a closed item does nothing."""
+        """Close a delivered work item. Idempotent: closing a closed item does nothing. A change request
+        closes only from a state its change model closes from (Review)."""
         return await _run("tracker_close", tracker.close(key, close_notes, close_code))
 
     @server.tool()
     async def tracker_list_candidates(tables: list[str] | None = None, limit: int = 50) -> dict[str, Any]:
-        """Keys of the active work items in the configured assignment groups, oldest first."""
+        """Keys of the open work items in the configured assignment groups, the most recently updated
+        first, at most `limit` (200 at most); `total` is how many the queue holds, `truncated` says the
+        bound left some out."""
         return await _run("tracker_list_candidates", tracker.list_candidates(tables, limit))
 
     @server.tool()

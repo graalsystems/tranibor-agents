@@ -249,6 +249,17 @@ async def test_a_change_closes_from_review_through_the_change_management_api(mcp
     assert (await mcp.call("tracker_close", key=key))["closed"] is False
 
 
+async def test_a_change_without_sn_change_read_says_the_role(mcp: Mcp, fake: FakeServiceNow) -> None:
+    """Without `sn_change_read` the instance answers the next states with 200 and `[null]` (Australia PDI,
+    2026-11-24): the move is refused naming the role, not as a state that reaches `None`."""
+    key, sys_id = await _filed_change(mcp)
+    fake.change_api_readable = False
+    refused = await mcp.error("tracker_set_state", key=key, status="assess")
+    assert "sn_change_read" in refused and "None" not in refused, refused
+    assert fake.tables["change_request"][sys_id]["state"] == "-5"
+    assert not [r for r in fake.requests if r.method == "PATCH"]
+
+
 # ───── the queue poll pages, and says when it stops (graalsystems/tranibor-agents#25) ─────
 
 

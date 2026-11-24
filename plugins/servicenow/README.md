@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.14, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.15, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.14.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.15.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -101,7 +101,8 @@ Found while writing this plugin against the core at `49fc8082` (S43-02):
   `servers/servicenow.yaml`, and `server/tests/test_descriptor.py` checks them.
 - A template cannot name a plugin's server as its tracker (see the template's README).
 - A procedure's `{{webhook_url:…}}` only knows the core's webhook sources; the Business Rule's URL is
-  written `{{api_url}}/api/v1/webhooks/plugins/servicenow/servicenow`.
+  `{{plugin_webhook_url:servicenow/servicenow}}`, which the core renders as
+  `<api>/api/v1/webhooks/plugins/<org>/servicenow/servicenow`.
 - The connector an installed plugin server becomes is assumed to be named after the server
   (`servicenow`), hence the tool names `servicenow__get_record`, … in the agent's instructions.
 - An eval suite is only required to name its agent; this one uses the catalogue's `eval_cases` shape plus
@@ -255,8 +256,23 @@ are under unit tests and in this suite (`test_a_change_request_is_filed_once_and
 Instance on 2026-11-24, by basic authentication as the instance's admin: a change moved New to Assess
 through the Change Management API, an unreachable state and the close refused before any write (#24),
 `total`, `truncated` and the paging (#25). The change must be filed with an assignment group, or the
-instance's change model refuses New to Assess (#46). Not proven: OAuth client credentials, and the
-`sn_change_read` and `sn_change_write` roles for a non-admin integration user.
+instance's change model refuses New to Assess (#46).
+
+On the same instance on 2026-11-24 (0.2.15), the suite passed **18 tests: 9 by basic authentication and 9 by
+OAuth client credentials, as a non-admin integration user** built by the procedure through the Table API
+(`choregos.integration`, web-service-only, internal integration user), the instance's admin as cleanup
+user. The user's roles, each found necessary: `choregos_integration` (the procedure's role and its ACLs),
+`snc_basic_auth_api_access` (basic authentication only) and `sn_change_read`. Without `sn_change_read`
+the Change Management API answers the next states with 200 and `available_states: [null]`, not a 403;
+the server said the change "reaches: None", it now says the role is missing (0.2.15, under a unit test
+red without it, and read on the instance). `sn_change_write` is not needed: the change's `PATCH` passed
+with `sn_change_read` and the custom role's `change_request` write ACLs. `sn_change_read` brings 16
+contained roles of its own (`cmdb_read`, `view_changer`, …): the least the Change Management API asks for.
+OAuth: an **OAuth Client** in the application registry (`oauth_entity`, `type = client`,
+`inbound_grant_type = client_credential`, **OAuth Application User** = `choregos.integration`) and the
+system property
+`glide.oauth.inbound.client.credential.grant_type.enabled = true`, which the instance did not hold:
+without it, or set to `false`, `/oauth_token.do` answers `401 access_denied`.
 
 ### What is proven on a deployment, and what is not
 
@@ -270,9 +286,19 @@ template, a new incident opened as a work item by the poll, triaged by the agent
 settled, `servicenow.apply_triage` approved by a second person and applied once (`update_record` then
 `add_work_note`, read back on the instance). It found graalsystems/tranibor-agents#34, #36, #37 and #38, all
 fixed. Not proven there: the Business Rule's delivery to `POST /webhooks/plugins/…` (the work item came from
-the poll), OAuth client credentials on the cluster (Basic was used), a nightly run, 0.2.12 on the cluster
-(it passed the live suite on the instance, above), and a human's governance (the approvers were test accounts driven by an agent). No
-finding is open.
+the poll), OAuth client credentials on the cluster (Basic was used, OAuth is proven on the instance
+above), a nightly run (it needs the instance's credentials as CI secrets), 0.2.12 and later on the cluster
+(they passed the live suite on the instance, above), and a human's governance (the approvers were test
+accounts driven by an agent). No finding is open.
+
+The webhook delivery was tried on 2026-11-24 and could not be run on that cluster. The procedure's
+Business Rule, on the instance, posted to the dev deployment's route
+(`/api/v1/webhooks/plugins/<org>/servicenow/servicenow`) on an incident's insert, and the instance's
+outbound HTTP log answered `-1`, `java.net.UnknownHostException`: the dev deployment's API name resolves
+only on its private network, so no ServiceNow instance can reach it. A deployment whose API a public
+name reaches is what the delivery needs. Besides, reinstalling the plugin there needs a second
+administrator's approval in a browser session (`decision_requires_session`: an API token cannot give
+it).
 
 The image: `docker build -t servicenow-mcp plugins/servicenow/server` (non-root, port 8080, exec-form
 entry point). CI builds, signs and publishes it and writes its digest into `servers/servicenow.yaml`.

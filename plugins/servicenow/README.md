@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.13, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.14, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.13.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.14.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -251,8 +251,12 @@ the error's `detail`.
 
 The change request's move along its change model and the queue poll's paging (0.2.12, findings #24 and #25)
 are under unit tests and in this suite (`test_a_change_request_is_filed_once_and_its_state_model_is_said`,
-`test_reads_say_what_their_bound_left_out`), but the suite has **not been run on an instance since**: what
-Change Management roles the integration user needs (`sn_change_read`, `sn_change_write`) is unconfirmed.
+`test_reads_say_what_their_bound_left_out`). The suite passed (9 tests) on the Australia Personal Developer
+Instance on 2026-11-24, by basic authentication as the instance's admin: a change moved New to Assess
+through the Change Management API, an unreachable state and the close refused before any write (#24),
+`total`, `truncated` and the paging (#25). The change must be filed with an assignment group, or the
+instance's change model refuses New to Assess (#46). Not proven: OAuth client credentials, and the
+`sn_change_read` and `sn_change_write` roles for a non-admin integration user.
 
 ### What is proven on a deployment, and what is not
 
@@ -266,8 +270,8 @@ template, a new incident opened as a work item by the poll, triaged by the agent
 settled, `servicenow.apply_triage` approved by a second person and applied once (`update_record` then
 `add_work_note`, read back on the instance). It found graalsystems/tranibor-agents#34, #36, #37 and #38, all
 fixed. Not proven there: the Business Rule's delivery to `POST /webhooks/plugins/…` (the work item came from
-the poll), OAuth client credentials on the cluster (Basic was used), a nightly run, 0.2.12's change-request
-move and queue paging, and a human's governance (the approvers were test accounts driven by an agent). No
+the poll), OAuth client credentials on the cluster (Basic was used), a nightly run, 0.2.12 on the cluster
+(it passed the live suite on the instance, above), and a human's governance (the approvers were test accounts driven by an agent). No
 finding is open.
 
 The image: `docker build -t servicenow-mcp plugins/servicenow/server` (non-root, port 8080, exec-form

@@ -10,16 +10,16 @@
 #   whose `update_record` effect is compensated (the previous values come back) if a later effect fails.
 # - A failed triage goes back to the queue untouched: the triager writes nothing on failure.
 #
-# The work item's `fields.sys_id` is the incident's sys_id, as the server's tracker profile returns it
-# (`tracker_fetch_item`, TRACKER_PROFILE.md).
+# The incident's sys_id is `fields.tracker.answers.sys_id`: the platform keeps what the server's
+# `tracker_fetch_item` returns (TRACKER_PROFILE.md) inside `fields.tracker`, never at the top of `fields`.
 apiVersion: choregos/v1
 kind: Workflow
 metadata:
   name: incident-triage
-  version: 1
+  version: 2
   description: A ServiceNow incident triaged by an agent, reviewed by the service desk, and written back once approved.
-  # The work item's fields: `sys_id` and `table` come from the tracker (the incident), the others from the
-  # review form.
+  # The work item's fields: the incident's `sys_id` and `table` are the tracker's (`fields.tracker.answers`),
+  # the others the review form's.
   inputs:
     type: object
     properties:
@@ -84,7 +84,7 @@ transitions:
       title: "Apply the triage of {{ work_item.key }}"
       justification: approved by the service desk
       params:
-        sys_id: "{{ fields.sys_id }}"
+        sys_id: "{{ fields.tracker.answers.sys_id }}"
         category: "{{ fields.category }}"
         impact: "{{ fields.impact }}"
         urgency: "{{ fields.urgency }}"

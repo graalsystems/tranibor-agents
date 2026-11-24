@@ -117,7 +117,10 @@ fields:
 On the Australia instance the rule posted one request per insert, update and comment, each answered with
 its `sys_mod_count` (`server/tests/test_business_rule_deliveries.py` holds four of them). Tranibor's own
 writes are updates too: each work note and status note it adds is posted back, and Tranibor re-reads the
-item for nothing. A condition `gs.getUserName() != 'choregos.integration'` on the rule avoids that.
+item for nothing. A condition `gs.getUserName() != 'choregos.integration'` on the rule avoids that. If an
+incident is ever filed as the integration user itself (a scheduled probe that checks the platform end to end
+does), guard updates only, so that its insert is still delivered:
+`current.operation() == 'insert' || gs.getUserName() != 'choregos.integration'`.
 
 ## Permissions
 

@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.16, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.17, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.16.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.17.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -277,16 +277,16 @@ without it, or set to `false`, `/oauth_token.do` answers `401 access_denied`.
 ### What is proven on a deployment, and what is not
 
 The core's own live suite (`tests/live/test_servicenow_live.py` in graalsystems/tranibor, `-m live`; the
-server runs by hand and the test reads `TRANIBOR_LIVE_SERVICENOW_MCP_URL`, `_MCP_TOKEN` and
-`_WEBHOOK_SECRET`) drives the core's `PluginTracker` through this server to the same instance (4 passed,
-2026-11-21, server 0.1.3). On 2026-11-24 the governed path ran end to end on the Diametral dev cluster
-(core 0.29.0, server 0.2.9, the same instance, core story S80-20): the plugin installed from the `tranibor`
-source with a second administrator's approval, the connector configured in the console, a project from the
-template, a new incident opened as a work item by the poll, triaged by the agent (reads only), the review
-settled, `servicenow.apply_triage` approved by a second person and applied once (`update_record` then
-`add_work_note`, read back on the instance). It found graalsystems/tranibor-agents#34, #36, #37 and #38, all
-fixed. Not proven there: the Business Rule's delivery to `POST /webhooks/plugins/…` (the work item came from
-the poll), OAuth client credentials on the cluster (Basic was used, OAuth is proven on the instance
+server runs by hand and the test reads `TRANIBOR_LIVE_SERVICENOW_MCP_URL`, `_MCP_TOKEN` and `_WEBHOOK_SECRET`)
+drives the core's `PluginTracker` through this server to the same instance (4 passed, 2026-11-21, server
+0.1.3). On 2026-11-24 the governed path ran end to end on the Diametral dev cluster (core 0.29.0, server
+0.2.9, the same instance, core story S80-20): the plugin installed from the `tranibor` source with a second
+administrator's approval, the connector configured in the console, a project from the template, a new incident
+opened as a work item by the poll, triaged by the agent (reads only), the review settled,
+`servicenow.apply_triage` approved by a second person and applied once (`update_record` then `add_work_note`,
+read back on the instance). It found graalsystems/tranibor-agents#34, #36, #37 and #38, all fixed. Not proven
+there that day: the Business Rule's delivery to `POST /webhooks/plugins/…` (the work item came from the poll;
+proven later, below), OAuth client credentials on the cluster (Basic was used, OAuth is proven on the instance
 above), and a human's governance (the approvers were test accounts driven by an agent). No finding is open.
 
 **A nightly, without CI secrets** (core story S80-46). The P1 nightly runs on the deployment itself: a project
@@ -299,16 +299,22 @@ plugin 0.2.15 installed and Ready) one night was green: the incident was opened 
 triaged after 140 s. The core's runbook `docs/runbooks/servicenow-nightly.md` says where to read a night and
 what a hibernating or reclaimed PDI does to it. Fourteen green nights in a row are not proven yet.
 
-The webhook delivery was tried on 2026-11-24 and could not be run on that cluster. The procedure's
-Business Rule, on the instance, posted to the dev deployment's route
-(`/api/v1/webhooks/plugins/<org>/servicenow/servicenow`) on an incident's insert, and the instance's
-outbound HTTP log answered `-1`, `java.net.UnknownHostException`: the dev deployment's API name resolves
-only on its private network, so no ServiceNow instance can reach it. A deployment whose API a public
-name reaches is what the delivery needs. Besides, reinstalling the plugin there needs a second
-administrator's approval in a browser session (`decision_requires_session`: an API token cannot give
-it). For the nightly above, the owner had the pending install (0.2.14) and the upgrade to 0.2.15 approved as
-the second test administrator by running the approval route's own code in the API process, without that
-session; the audit's `plugin.approve` says so (`manual: true` and a note).
+**The webhook delivery is proven on a deployment** (2026-11-24, core story S80-47). It was first tried that day
+and could not run: the dev deployment's API name resolved only on its private network, and the instance's
+outbound HTTP log answered `-1`, `java.net.UnknownHostException`. Once that name was public, the procedure's
+two system properties and its Business Rule (incident, after insert and update, filter on the Service Desk
+group) posted an incident's insert to `/api/v1/webhooks/plugins/<org>/servicenow/servicenow`: `202` in the
+instance's `sys_outbound_http_log`, and the work item opened by the delivery about four seconds after the
+incident was filed (`initiated_by: tracker:plugin:servicenow/servicenow`, a received event
+`created_work_item`), not by the poll (`tracker:sync`). The first delivery was dropped by the core as
+unrouted, because an archived project still used the same tracker: graalsystems/tranibor#2221, fixed by
+graalsystems/tranibor#2222. The rule stays in place for the nightly, whose incident it delivers on insert.
+
+Reinstalling the plugin on that deployment needs a second administrator's approval in a browser session
+(`decision_requires_session`: an API token cannot give it). For the nightly above, the owner had the pending
+install (0.2.14) and the upgrade to 0.2.15 approved as the second test administrator by running the approval
+route's own code in the API process, without that session; the audit's `plugin.approve` says so (`manual:
+true` and a note).
 
 The image: `docker build -t servicenow-mcp plugins/servicenow/server` (non-root, port 8080, exec-form
 entry point). CI builds, signs and publishes it and writes its digest into `servers/servicenow.yaml`.

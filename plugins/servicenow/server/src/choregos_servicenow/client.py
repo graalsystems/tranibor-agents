@@ -133,6 +133,12 @@ class ServiceNowClient:
 
     async def _request(self, method: str, path: str, *, params: dict[str, str] | None = None, json: Any = None) -> Any:
         for attempt in (0, 1):
+            # Stateless: every call authenticates on its own, with no session cookie of an earlier one.
+            # On the Australia PDI behind the platform, a call that sent back the session cookies
+            # (`JSESSIONID`, `glide_user_route`, …) after a minute idle got no answer at all, every
+            # time until the process restarted (dev, 2026-11-24); the same call without them answered
+            # in under a second.
+            self._http.cookies.clear()
             headers: dict[str, str] = {}
             if self._settings.auth == "oauth":
                 headers["Authorization"] = f"Bearer {await self._bearer(renew=attempt == 1)}"

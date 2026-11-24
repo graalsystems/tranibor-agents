@@ -17,7 +17,8 @@ Things to know:
   step writes only what the review form holds. Priority is never written: ServiceNow computes it.
 - **A customer comment or a resolution** is proposed only when a published knowledge article or a resolved
   incident gives the fix, and always waits for a person (`human_approval` in the server's descriptor).
-- **The work item's `sys_id`** is the incident's, as the server's tracker profile returns it.
+- **The incident's `sys_id`** is `fields.tracker.answers.sys_id`: the platform keeps what the server's tracker
+  profile returns inside `fields.tracker` (`tests/test_incident_triage_apply.py`).
 
 ## What the template format cannot say yet
 

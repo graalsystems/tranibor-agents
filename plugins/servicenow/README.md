@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.15, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.16, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.15.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.16.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -287,9 +287,17 @@ settled, `servicenow.apply_triage` approved by a second person and applied once 
 `add_work_note`, read back on the instance). It found graalsystems/tranibor-agents#34, #36, #37 and #38, all
 fixed. Not proven there: the Business Rule's delivery to `POST /webhooks/plugins/…` (the work item came from
 the poll), OAuth client credentials on the cluster (Basic was used, OAuth is proven on the instance
-above), a nightly run (it needs the instance's credentials as CI secrets), 0.2.12 and later on the cluster
-(they passed the live suite on the instance, above), and a human's governance (the approvers were test
-accounts driven by an agent). No finding is open.
+above), and a human's governance (the approvers were test accounts driven by an agent). No finding is open.
+
+**A nightly, without CI secrets** (core story S80-46). The P1 nightly runs on the deployment itself: a project
+with an internal tracker schedules one work item a night whose only step is a job (the core's
+`examples/servicenow-nightly/workflow.yaml`) that files an incident through this plugin's connector
+(`tracker_create_item`, allowed for that project's group alone) and reads it back with `tracker_fetch_item`
+until the triage project's poll opened it, the agent triaged it, and the platform set it In Progress and asked
+for the review. The instance's credentials stay in the connector's sealed secrets. On 2026-11-24 (core 0.29.3,
+plugin 0.2.15 installed and Ready) one night was green: the incident was opened by the poll after 48 s and
+triaged after 140 s. The core's runbook `docs/runbooks/servicenow-nightly.md` says where to read a night and
+what a hibernating or reclaimed PDI does to it. Fourteen green nights in a row are not proven yet.
 
 The webhook delivery was tried on 2026-11-24 and could not be run on that cluster. The procedure's
 Business Rule, on the instance, posted to the dev deployment's route
@@ -298,7 +306,9 @@ outbound HTTP log answered `-1`, `java.net.UnknownHostException`: the dev deploy
 only on its private network, so no ServiceNow instance can reach it. A deployment whose API a public
 name reaches is what the delivery needs. Besides, reinstalling the plugin there needs a second
 administrator's approval in a browser session (`decision_requires_session`: an API token cannot give
-it).
+it). For the nightly above, the owner had the pending install (0.2.14) and the upgrade to 0.2.15 approved as
+the second test administrator by running the approval route's own code in the API process, without that
+session; the audit's `plugin.approve` says so (`manual: true` and a note).
 
 The image: `docker build -t servicenow-mcp plugins/servicenow/server` (non-root, port 8080, exec-form
 entry point). CI builds, signs and publishes it and writes its digest into `servers/servicenow.yaml`.

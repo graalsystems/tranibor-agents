@@ -274,7 +274,9 @@ class ServiceNowClient:
         state (`GET /api/sn_chg_rest/change/{sys_id}/nextstates`: the instance evaluates the model's
         transitions and their conditions)."""
         check_sys_id(sys_id)
-        result = await self._request("GET", f"/api/sn_chg_rest/change/{sys_id}/nextstates") or {}
+        result = await self._request("GET", f"/api/sn_chg_rest/change/{sys_id}/nextstates")
+        if not isinstance(result, dict):
+            raise ServiceNowError(f"the Change Management API's next states are not an object: {type(result).__name__}")
         labels = {str(k): str(v) for k, v in (result.get("state_label") or {}).items()}
         known = await self.choices("change_request")
         return {

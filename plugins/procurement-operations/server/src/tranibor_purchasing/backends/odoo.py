@@ -224,6 +224,7 @@ class OdooPurchasing:
         self.rpc = rpc
         self._countries: dict[str, int] = {}
         self._has_registry: bool | None = None
+        self._line_unit: tuple[str, int] | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> OdooPurchasing:
@@ -589,6 +590,36 @@ class OdooPurchasing:
 
     # ─────────────────────────── purchase requests ───────────────────────────
 
+    async def _unit_of_measure(self) -> tuple[str, int]:
+        """The field a purchase order line keeps its unit in, and Odoo's reference unit ("Units"). A line
+        without a product has no unit to derive: Odoo 19 accepts it, Odoo 20 fails on it with `Expected
+        singleton: uom.uom()` (the core's purchasing night, 2026-11-24). The unit is set on every line, by
+        the field this version has (`product_uom_id`, else `product_uom`). Asked once, of Odoo."""
+        if self._line_unit is None:
+            fields = await self.rpc.call(
+                "purchase.order.line", "fields_get", allfields=["product_uom_id", "product_uom"], attributes=["type"]
+            )
+            known = fields if isinstance(fields, dict) else {}
+            field = next((name for name in ("product_uom_id", "product_uom") if name in known), None)
+            if field is None:
+                raise BackendError("odoo's purchase order line has no unit of measure field this backend knows")
+            reference = await self._search_read(
+                "ir.model.data",
+                [["module", "=", "uom"], ["name", "=", "product_uom_unit"], ["model", "=", "uom.uom"]],
+                ["res_id"],
+                order="id asc",
+                limit=1,
+            )
+            if reference:
+                unit = int(reference[0]["res_id"])
+            else:  # a user who may not read external identifiers: the reference unit by its name
+                named = await self._search_read("uom.uom", [["name", "=", "Units"]], ["name"], order="id asc", limit=1)
+                if not named:
+                    raise BackendError('odoo has no reference unit of measure (`uom.product_uom_unit`, "Units")')
+                unit = int(named[0]["id"])
+            self._line_unit = (field, unit)
+        return self._line_unit
+
     async def _currency_id(self, code: str) -> int:
         rows = await self._search_read("res.currency", [["name", "=", code]], ["name"], order="id asc", limit=1)
         if not rows:
@@ -678,9 +709,13 @@ class OdooPurchasing:
         note = f"<p>{html.escape(new.title)}</p>" + (
             f"<p>{html.escape(new.justification)}</p>" if new.justification else ""
         )
+        currency = await self._currency_id(new.currency)  # refused before anything else is asked of Odoo
+        unit_field, unit_id = await self._unit_of_measure()
+        for _, _, line_values in order_lines:
+            line_values[unit_field] = unit_id
         values = {
             "partner_id": _odoo_id(new.supplier_id, "supplier"),
-            "currency_id": await self._currency_id(new.currency),
+            "currency_id": currency,
             "note": note,
             "order_line": order_lines,
         }

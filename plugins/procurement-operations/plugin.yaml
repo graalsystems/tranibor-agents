@@ -17,7 +17,7 @@ apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: procurement-operations
-  version: 0.3.2
+  version: 0.3.3
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-

@@ -10,6 +10,7 @@ from mcp import Client
 from choregos_servicenow.fake import PROMPT_INJECTION, FakeServiceNow, sys_id_of
 
 from .conftest import Mcp
+from .test_tracker import queue
 
 READS = {"search_records", "get_record", "get_journal", "get_ci", "list_ci_relations", "search_knowledge"}
 WRITES = {"add_work_note", "update_record", "add_comment", "resolve_incident", "reopen_incident"}
@@ -67,6 +68,17 @@ async def test_the_row_cap_is_fifty(mcp: Mcp, fake: FakeServiceNow) -> None:
     await mcp.call("search_records", table="sys_choice", limit=500)
     params = parse_qs(urlsplit(str(fake.requests[-1].url)).query)
     assert params["sysparm_limit"] == ["50"]
+
+
+async def test_a_capped_search_says_so(mcp: Mcp, fake: FakeServiceNow) -> None:
+    """The cap stays (the agent's reads are bounded), but the answer says what it left out
+    (graalsystems/tranibor-agents#25): the instance's `X-Total-Count`, and `truncated`."""
+    queue(fake, 60)
+    capped = await mcp.call("search_records", table="incident", limit=500)
+    assert capped["count"] == 50
+    assert capped["truncated"] is True and capped["total"] > 60
+    one = await mcp.call("search_records", table="incident", filters=[{"field": "number", "value": "INC0010006"}])
+    assert (one["count"], one["total"], one["truncated"]) == (1, 1, False)
 
 
 async def test_a_table_outside_the_list_is_refused_before_any_call(mcp: Mcp, fake: FakeServiceNow) -> None:

@@ -178,9 +178,30 @@ async def test_a_change_request_is_filed_once_and_its_state_model_is_said(mcp: L
     assert again["record"]["sys_id"] == first["record"]["sys_id"]
     key = first["record"]["fields"]["number"]
     assert (await mcp.call("tracker_fetch_item", key=key))["state"] == "New"
-    # The change model refuses a state jump through the Table API: the instance's reason reaches the caller.
+    # graalsystems/tranibor-agents#24: a state the change model does not reach from New is refused by the
+    # server, naming those it reaches, before any write (the Table API answered 403 `Change Model: Check
+    # State Transition`); one it reaches moves through the Change Management API.
     refused = await mcp.error("tracker_set_state", key=key, status="Implement")
-    assert "403" in refused and "Change Model" in refused, refused
+    assert "not reachable" in refused and "403" not in refused, refused
+    moved = await mcp.call("tracker_set_state", key=key, status="Assess")
+    assert (moved["changed"], moved["state"]) == (True, "Assess")
+    assert (await mcp.call("tracker_fetch_item", key=key))["state"] == "Assess"
+    # Closed is reached from Review only, after the change's approvals: no close walks past them.
+    closing = await mcp.error("tracker_close", key=key)
+    assert "not reachable" in closing and "403" not in closing, closing
+
+
+async def test_reads_say_what_their_bound_left_out(mcp: LiveMcp) -> None:
+    """graalsystems/tranibor-agents#25: the instance's count (`X-Total-Count`) and `truncated` in the answer,
+    and the queue poll read in pages up to the profile's bound of 200, the most recently updated first."""
+    capped = await mcp.call("search_records", table="incident", limit=500)
+    assert capped["count"] == 50 and capped["total"] >= 50, (capped["count"], capped.get("total"))
+    assert capped["truncated"] is (capped["total"] > 50)
+    queue = await mcp.call("tracker_list_candidates", limit=200)
+    assert len(queue["keys"]) <= 200 and queue["total"] >= len(queue["keys"])
+    assert queue["truncated"] is (queue["total"] > len(queue["keys"]))
+    if queue["keys"]:
+        assert (await mcp.call("tracker_list_candidates", limit=1))["keys"] == queue["keys"][:1]
 
 
 async def test_a_request_item_moves_on_the_task_states(mcp: LiveMcp, admin: Admin | None) -> None:

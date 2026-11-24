@@ -3,7 +3,7 @@
 
 The core opens a plugin tracker's item, by the queue poll or a delivery, only when it carries `agent-ready`
 or matches one of the project's start rules (ADR 0113 of the core); the ServiceNow server's items carry no
-label. On the Diametral dev cluster (core 0.29.0, servicenow 0.2.8) a project from the template polled the
+label. On an operator's dev cluster (core 0.29.0, servicenow 0.2.8) a project from the template polled the
 queue and opened nothing until the rule was set by hand (graalsystems/tranibor-agents#38). From core 0.29.2
 a template ships the rule (`defaults.start_rules`, graalsystems/tranibor#2200), and the plugin's floor says so.
 

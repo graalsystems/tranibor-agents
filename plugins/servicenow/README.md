@@ -279,7 +279,7 @@ without it, or set to `false`, `/oauth_token.do` answers `401 access_denied`.
 The core's own live suite (`tests/live/test_servicenow_live.py` in graalsystems/tranibor, `-m live`; the
 server runs by hand and the test reads `TRANIBOR_LIVE_SERVICENOW_MCP_URL`, `_MCP_TOKEN` and `_WEBHOOK_SECRET`)
 drives the core's `PluginTracker` through this server to the same instance (4 passed, 2026-11-21, server
-0.1.3). On 2026-11-24 the governed path ran end to end on the Diametral dev cluster (core 0.29.0, server
+0.1.3). On 2026-11-24 the governed path ran end to end on an operator's dev cluster (core 0.29.0, server
 0.2.9, the same instance, core story S80-20): the plugin installed from the `tranibor` source with a second
 administrator's approval, the connector configured in the console, a project from the template, a new incident
 opened as a work item by the poll, triaged by the agent (reads only), the review settled,

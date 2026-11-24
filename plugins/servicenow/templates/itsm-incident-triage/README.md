@@ -30,7 +30,7 @@ Things to know:
   ```
 
   Only the queue's new incidents then become work items, not the ones already In Progress or On Hold
-  (seen on the Diametral dev cluster, core 0.29.0, servicenow 0.2.8: the next poll opened exactly the new
+  (seen on an operator's dev cluster, core 0.29.0, servicenow 0.2.8: the next poll opened exactly the new
   incident). A creation request that sets its own `config.start_rules` keeps them instead, and the rules can
   be changed afterwards in the project's settings, **Triggers** (`tests/test_template_start_rule.py`).
 - **The incident's `sys_id`** is `fields.tracker.answers.sys_id`: the platform keeps what the server's tracker
@@ -44,6 +44,6 @@ server as the tracker, so the manifest writes `tracker: plugin:servicenow/servic
 mirroring the webhook route `/webhooks/plugins/{plugin}/{server}` — until S43-07 settles the form.
 
 Validated by `tranibor plugin validate` (manifest) and the core's workflow parser (strict). Run end to end
-on the Diametral dev cluster on 2026-11-24 (core 0.29.0, plugin 0.2.9, Basic authentication, the queue poll
+on an operator's dev cluster on 2026-11-24 (core 0.29.0, plugin 0.2.9, Basic authentication, the queue poll
 and not the Business Rule's delivery): a new incident opened a work item, the triage ran, the review was
 settled and the apply step, approved by a second person, wrote the classification and the work note once.

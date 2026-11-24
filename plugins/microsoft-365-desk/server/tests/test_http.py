@@ -167,7 +167,7 @@ def _tools_list(client: TestClient, headers: dict[str, str]) -> int:
 def test_the_token_comes_from_the_current_core_s_variable_or_an_older_core_s(variable: str) -> None:
     """The core gives the pod `TRANIBOR_SERVER_TOKEN` since its rename (core ADR 0176); an older core,
     `CHOREGOS_SERVER_TOKEN`. Reading only the older name, the server refused to start on core 0.29.0
-    (graalsystems/tranibor-agents#35, as servicenow 0.2.4 did on the Diametral dev cluster)."""
+    (graalsystems/tranibor-agents#35, as servicenow 0.2.4 did on an operator's dev cluster)."""
     settings = Settings.from_env({"M365_DESK_FAKE": "1", variable: TOKEN})
     with TestClient(build_app(settings), base_url=BASE) as client:
         assert _tools_list(client, BEARER) == 200

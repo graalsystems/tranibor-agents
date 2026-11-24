@@ -5,7 +5,7 @@ The platform's plugin tracker (`tranibor_adapters.tracker.plugin`) gives the ser
 item only inside `fields.tracker` (S51-04): `answers` holds them as text, by name. A work item opened by
 the poll or the webhook carries `fields.tracker` and, once the service desk has settled the review, the
 form's answers — never a top-level `fields.sys_id`. The apply step read `{{ fields.sys_id }}`: on the
-Diametral dev cluster (S80-20, 2026-11-24) the system transition was refused (`parameter not found`),
+operator's dev cluster (S80-20, 2026-11-24) the system transition was refused (`parameter not found`),
 `action_succeeded` failed, and the incident went to `needs_human` with nothing written.
 
 Played from a core checkout, as the `templates` job does:

@@ -99,7 +99,7 @@ def test_insecure_dev_runs_the_fake_without_a_token(variable: str) -> None:
 def test_the_token_comes_from_the_current_core_s_variable_or_an_older_core_s(variable: str) -> None:
     """The core gives the pod `TRANIBOR_SERVER_TOKEN` since its rename (core ADR 0176); an older core,
     `CHOREGOS_SERVER_TOKEN`. Reading only the older name, the server refused to start on core 0.29.0
-    (graalsystems/tranibor-agents#35, as servicenow 0.2.4 did on the Diametral dev cluster)."""
+    (graalsystems/tranibor-agents#35, as servicenow 0.2.4 did on an operator's dev cluster)."""
     with TestClient(build_app(Settings.from_env({"PURCHASING_FAKE": "1", variable: TOKEN})), base_url=BASE) as client:
         assert _call(client, BEARER, supplier_id="SUP-0001") == 200
         assert _call(client, {"Authorization": f"Bearer {TOKEN}x"}, supplier_id="SUP-0001") == 401

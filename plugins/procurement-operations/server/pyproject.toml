@@ -1,6 +1,6 @@
 [project]
 name = "tranibor-purchasing"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server for purchasing systems (suppliers, contracts, purchase requests), governed by Tranibor."
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"

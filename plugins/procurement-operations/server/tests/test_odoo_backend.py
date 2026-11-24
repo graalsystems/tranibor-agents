@@ -19,7 +19,7 @@ from tranibor_purchasing.errors import BackendError, Conflict, NotFound, NotSupp
 from tranibor_purchasing.profile import NewPurchaseRequest, NewSupplier, RequestLine
 from tranibor_purchasing.tools import PurchasingTools
 
-from .odoo_script import KEY, ODOO_ENV, Odoo, has_registry, no_registry, one_supplier_row
+from .odoo_script import KEY, ODOO_ENV, Odoo, has_registry, no_registry, one_supplier_row, unit_of_measure
 
 TAGS = [{"id": 3, "name": "Office Supplies"}]
 
@@ -504,6 +504,7 @@ ORDER_LINES = [
 async def test_create_purchase_request_writes_a_draft_order_with_its_lines_and_a_reference(odoo: Odoo) -> None:
     odoo.script.expect("purchase.order", "search_read", [])  # no order carries this action's reference
     odoo.script.expect("res.currency", "search_read", [{"id": 1, "name": "EUR"}])
+    unit_of_measure(odoo.script)
     odoo.script.expect("purchase.order", "create", [31])
     odoo.script.expect("purchase.order", "search_read", [ORDER_ROW])
     odoo.script.expect("purchase.order.line", "search_read", ORDER_LINES)
@@ -521,10 +522,21 @@ async def test_create_purchase_request_writes_a_draft_order_with_its_lines_and_a
                 "name": "A4 paper [unit: box]",
                 "product_qty": 10.0,
                 "price_unit": 21.5,
+                "product_uom_id": 1,
                 "date_planned": "2026-12-15 12:00:00",
             },
         ],
-        [0, 0, {"name": "Toner", "product_qty": 2.5, "price_unit": 40.0, "date_planned": "2026-12-15 12:00:00"}],
+        [
+            0,
+            0,
+            {
+                "name": "Toner",
+                "product_qty": 2.5,
+                "price_unit": 40.0,
+                "product_uom_id": 1,
+                "date_planned": "2026-12-15 12:00:00",
+            },
+        ],
     ]
     assert domain_of(odoo.script.sent("purchase.order", "search_read")[0]) == [["origin", "=", marker]]
     assert request.model_dump(mode="json") == {
@@ -544,6 +556,38 @@ async def test_create_purchase_request_writes_a_draft_order_with_its_lines_and_a
         "cancel_reason": None,
         "created_at": "2026-11-20T09:00:00Z",
     }
+
+
+@pytest.mark.parametrize(
+    ("field", "readable_xmlid"), [("product_uom_id", True), ("product_uom", True), ("product_uom_id", False)]
+)
+async def test_every_line_carries_the_reference_unit_by_the_field_this_odoo_has(
+    odoo: Odoo, field: str, readable_xmlid: bool
+) -> None:
+    """Odoo 20 fails on a line without a product and without a unit (`Expected singleton: uom.uom()`, the
+    core's night of 2026-11-24): the unit is set, by the field the version has, and asked once."""
+    for key in ("k1", "k2"):
+        odoo.script.expect("purchase.order", "search_read", [])
+        odoo.script.expect("res.currency", "search_read", [{"id": 1, "name": "EUR"}])
+        if key == "k1":
+            unit_of_measure(odoo.script, field, readable_xmlid=readable_xmlid)
+        odoo.script.expect("purchase.order", "create", [31])
+        odoo.script.expect("purchase.order", "search_read", [ORDER_ROW])
+        odoo.script.expect("purchase.order.line", "search_read", ORDER_LINES)
+        await odoo.backend.create_purchase_request(_request(contract_id="21"), action_key=key)
+    for sent in odoo.script.sent("purchase.order", "create"):
+        lines = [values for _, _, values in sent["vals_list"][0]["order_line"]]
+        assert [line[field] for line in lines] == [1, 1]
+    assert len(odoo.script.sent("purchase.order.line", "fields_get")) == 1
+
+
+async def test_an_odoo_whose_line_has_no_unit_field_is_a_backend_error_before_a_write(odoo: Odoo) -> None:
+    odoo.script.expect("purchase.order", "search_read", [])
+    odoo.script.expect("res.currency", "search_read", [{"id": 1, "name": "EUR"}])
+    unit_of_measure(odoo.script, "")
+    with pytest.raises(BackendError, match="no unit of measure field"):
+        await odoo.backend.create_purchase_request(_request(), action_key="k")
+    assert odoo.script.sent("purchase.order", "create") == []
 
 
 async def test_a_replayed_create_returns_the_order_that_carries_the_reference_and_writes_nothing(odoo: Odoo) -> None:
@@ -572,6 +616,7 @@ async def test_amounts_odoo_stored_differently_are_cancelled_and_reported(odoo: 
     rounded = [{**ORDER_LINES[0], "price_unit": 22.0}, ORDER_LINES[1]]  # a database keeping fewer decimals
     odoo.script.expect("purchase.order", "search_read", [])
     odoo.script.expect("res.currency", "search_read", [{"id": 1, "name": "EUR"}])
+    unit_of_measure(odoo.script)
     odoo.script.expect("purchase.order", "create", [31])
     odoo.script.expect("purchase.order", "search_read", [ORDER_ROW])
     odoo.script.expect("purchase.order.line", "search_read", rounded)

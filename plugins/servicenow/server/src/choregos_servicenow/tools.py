@@ -194,8 +194,12 @@ class ServiceNowTools:
         default_order = "sys_updated_on" if "sys_updated_on" in TABLE_FIELDS[table] else None
         if order_by or default_order:
             query.order(order_by or str(default_order), descending)
-        rows = await self.client.list_records(table, query, fields=fields, limit=limit)
-        return {"table": table, "count": len(rows), "records": rows}
+        found = await self.client.read(table, query, fields=fields, bound=max(1, min(limit, MAX_ROWS)))
+        answer: dict[str, Any] = {"table": table, "count": len(found.rows), "records": found.rows}
+        answer["truncated"] = found.truncated
+        if found.total is not None:
+            answer["total"] = found.total
+        return answer
 
     async def get_record(
         self,

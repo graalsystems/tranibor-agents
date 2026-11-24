@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.11, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.12, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.11.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.12.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -109,7 +109,8 @@ Found while writing this plugin against the core at `49fc8082` (S43-02):
 
 ## The server
 
-An MCP server (streamable HTTP at `/mcp`) over the ServiceNow **Table API**:
+An MCP server (streamable HTTP at `/mcp`) over the ServiceNow **Table API** (and the **Change
+Management API** for a change request's state, which its change model governs):
 
 | Tools | Access | Notes |
 |:--|:--|:--|
@@ -136,7 +137,9 @@ The rules it enforces before any call to ServiceNow:
   accepted. Values have `^` escaped as `^^`, and `javascript:` and control characters are refused, so a
   term like `x^ORactive=false` cannot change the query;
 - every read names its fields (`sysparm_fields`), asks for `sysparm_display_value=all` (each record has
-  `fields` with stored values and `display` with labels) and returns at most 50 rows;
+  `fields` with stored values and `display` with labels) and returns at most 50 rows, with `total` (the
+  instance's count) and `truncated` when the cap left some out; the tracker's queue poll reads in pages,
+  up to 200 keys;
 - state codes come from `sys_choice` (cached for an hour), not from constants.
 
 Governance is the platform's: `servers/servicenow.yaml` lists every tool with its access, the three
@@ -225,7 +228,8 @@ SERVICENOW_WEBHOOK_SECRET=… TRANIBOR_SERVER_TOKEN=… uv run choregos-servicen
 `server/tests/live` runs the server, through MCP, against a real instance: both authentications, the
 tracker profile on an incident (filed, noted twice and written once, moved, listed in the queue, closed),
 the triage writes and their compensations, a value the instance keeps silently, the reads the triager
-uses, a change request filed once and the change model's refusal, a request item on `task`'s states. It is
+uses and what their bound left out, a change request filed once and moved along its change model, a request
+item on `task`'s states. It is
 skipped without its variables (listed in `server/tests/live/conftest.py`); every record it files is tagged
 `[choregos-live <run>]` and deleted at the end when a cleanup user is given.
 

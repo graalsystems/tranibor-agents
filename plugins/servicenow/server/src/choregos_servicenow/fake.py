@@ -57,6 +57,12 @@ _PRIORITY = {
     ("1", "1"): "1", ("1", "2"): "2", ("2", "1"): "2", ("1", "3"): "3", ("2", "2"): "3",
     ("3", "1"): "3", ("2", "3"): "4", ("3", "2"): "4", ("3", "3"): "5",
 }  # fmt: skip
+#: A normal change's model, as the fake plays it: from each state, the states its transitions reach (the
+#: next one, or Canceled). A real instance evaluates each transition's conditions too (an approval…).
+CHANGE_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "-5": ("-4", "4"), "-4": ("-3", "4"), "-3": ("-2", "4"), "-2": ("-1", "4"), "-1": ("0", "4"), "0": ("3", "4"),
+    "3": (), "4": (),
+}  # fmt: skip
 _OPERATORS = (
     "ISNOTEMPTY",
     "ISEMPTY",
@@ -240,6 +246,8 @@ class FakeServiceNow:
         if not self._authorised(request):
             return httpx.Response(401, json={"error": {"message": "User Not Authenticated"}})
         parts = path.strip("/").split("/")
+        if parts[:3] == ["api", "sn_chg_rest", "change"]:
+            return self._change_api(request, parts[3:])
         if parts[:3] != ["api", "now", "table"] or len(parts) not in (4, 5):
             return httpx.Response(404, json={"error": {"message": "No such resource"}})
         table = parts[3]
@@ -301,8 +309,9 @@ class FakeServiceNow:
 
             rows.sort(key=sort_key, reverse=descending)
         limit = int(params.get("sysparm_limit", "10000"))
-        result = [self._render(table, r, params) for r in rows[:limit]]
-        return httpx.Response(200, json={"result": result})
+        offset = int(params.get("sysparm_offset", "0"))
+        result = [self._render(table, r, params) for r in rows[offset : offset + limit]]
+        return httpx.Response(200, json={"result": result}, headers={"X-Total-Count": str(len(rows))})
 
     def _get(self, table: str, sys_id: str, params: dict[str, str]) -> httpx.Response:
         row = self.tables.get(table, {}).get(sys_id)
@@ -327,6 +336,13 @@ class FakeServiceNow:
         row = self.tables.get(table, {}).get(sys_id)
         if row is None:
             return httpx.Response(404, json={"error": {"message": "No Record found"}})
+        if table == "change_request" and "state" in body and str(body["state"]) != row.get("state"):
+            # The change model's Business Rule refuses every state written through the Table API (an Australia
+            # PDI, 2026-11-21, New to Assess included, for the plugin's role and for `itil`).
+            return _change_model_refusal(sys_id)
+        return self._write(table, row, body, params)
+
+    def _write(self, table: str, row: dict[str, Any], body: dict[str, Any], params: dict[str, str]) -> httpx.Response:
         journal = {k: body.pop(k) for k in _JOURNAL_FIELDS if k in body}
         row.update({k: str(v) for k, v in body.items() if (table, k) not in self.unwritable})
         if table in _NUMBER_PREFIX:
@@ -335,6 +351,29 @@ class FakeServiceNow:
         row["sys_updated_on"] = _ago(0)
         self._journal(table, row, journal)
         return httpx.Response(200, json={"result": self._render(table, row, params)})
+
+    def _change_api(self, request: httpx.Request, parts: list[str]) -> httpx.Response:
+        """The Change Management API: `GET change/{sys_id}/nextstates`, and `PATCH change/{sys_id}`, which
+        moves a change only to a state its model reaches from its current one."""
+        row = self.tables.get("change_request", {}).get(parts[0] if parts else "")
+        if row is None:
+            return httpx.Response(404, json={"error": {"message": "No Record found"}})
+        reachable = CHANGE_TRANSITIONS.get(str(row.get("state")), ())
+        if request.method == "GET" and parts[1:] == ["nextstates"]:
+            states = [str(row.get("state")), *reachable]
+            labels = {
+                c["value"]: c["label"]
+                for c in self.rows("sys_choice")
+                if c["name"] == "change_request" and c["element"] == "state" and c["value"] in states
+            }
+            return httpx.Response(200, json={"result": {"available_states": states, "state_label": labels}})
+        if request.method == "PATCH" and len(parts) == 1:
+            body = json.loads(request.content or b"{}")
+            if "state" in body and str(body["state"]) != row.get("state") and str(body["state"]) not in reachable:
+                return _change_model_refusal(row["sys_id"])
+            fields = ",".join(f for f in row if f not in _JOURNAL_FIELDS)
+            return self._write("change_request", row, body, {"sysparm_display_value": "all", "sysparm_fields": fields})
+        return httpx.Response(405, json={"error": {"message": "Method not allowed"}})
 
     def _derive(self, table: str, row: dict[str, Any]) -> None:
         """What ServiceNow computes: priority from impact and urgency, resolution and closure times."""
@@ -435,6 +474,14 @@ class FakeServiceNow:
             else:
                 out[name] = value
         return out
+
+
+def _change_model_refusal(sys_id: str) -> httpx.Response:
+    return httpx.Response(403, json={"error": {
+        "message": "Operation Failed",
+        "detail": f"Operation against file 'change_request' was aborted by Business Rule 'Change Model: Check State "
+                  f"Transition^{sys_id}'. Business Rule Stack:Change Model: Check State Transition",
+    }})  # fmt: skip
 
 
 # ─────────────────────────── the seed ───────────────────────────

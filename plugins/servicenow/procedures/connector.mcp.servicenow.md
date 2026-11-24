@@ -3,7 +3,7 @@ id: connector.mcp.servicenow
 title: Connect a ServiceNow instance
 applies_to: {connector: mcp/servicenow}
 audience: org_admin
-version: 2
+version: 3
 reviewed: 2026-11-21
 vendor_docs:
   - {title: "Configure OAuth client credentials grant (inbound)", url: "https://www.servicenow.com/docs/bundle/zurich-platform-security/page/administer/security/task/client-credentials.html"}
@@ -99,7 +99,9 @@ fields:
    The payload names the record and nothing else: Tranibor re-reads it through the Table API before
    acting, so nothing of the payload is trusted. The same rule on **Requested Item [sc_req_item]** or
    **Change Request [change_request]** makes those work items too.
-6. Without the Business Rule, Tranibor polls the assignment groups' queue instead, with a delay.
+6. Without the Business Rule, Tranibor polls the assignment groups' queue instead, with a delay: the open
+   items of those groups, the most recently updated first, at most 200 a poll (the server's answer says
+   `truncated` and logs `candidates_truncated` when the queue holds more).
 
 On the Australia instance the rule posted one request per insert, update and comment, each answered with
 its `sys_mod_count` (`server/tests/test_business_rule_deliveries.py` holds four of them). Tranibor's own
@@ -135,6 +137,12 @@ the three marked *role added*):
   notes).
 - **Create** on `incident` (the tracker can open one) and on `change_request` (`create_change_request`,
   always approved by a person).
+- **The Change Management API** (`/api/sn_chg_rest/change`): a change's
+  state moves through it, to a state its change model reaches from the current one (`GET …/nextstates`,
+  then `PATCH …/change/{sys_id}`), never through the Table API, whose write of a change's `state` the
+  model's Business Rule refuses. Give the integration user `sn_change_read` and `sn_change_write`, the
+  roles that API's ACLs ask for (to be confirmed on your release). *Not yet proven on an instance* (plugin 0.2.12): the Australia run of
+  0.2.4 predates it.
 - On that instance the record-level ACLs were new ones under the tables' own names (`incident`,
   `sc_req_item`, `change_request`, `problem`, `kb_knowledge`, `cmdb_ci`, `cmdb_rel_ci`, `sys_user_group`,
   `sys_choice`, `sys_journal_field`, `sys_user`: read; `incident`, `sc_req_item`, `change_request`: write;
@@ -191,9 +199,11 @@ organisation can only make that stricter.
 - `ServiceNow did not apply <field> (asked …, kept …)`: ServiceNow answered 200 to the write and kept the
   old value, which it does for a field the role cannot write and for a value the field refuses (a category
   that does not exist). The server writes back the fields of the same call that were applied.
-- `403 Operation Failed — Operation against file 'change_request' was aborted by Business Rule 'Change
-  Model: Check State Transition'`: a change moves only along its change model's transitions; the tracker
-  cannot move a change from `New` straight to another state through the Table API.
+- `'<state>' is not reachable from '<state>' on this change's model; it reaches: …`: a change moves only
+  along its change model's transitions, and closes only from Review, once its approvals are given on the
+  instance. Move it there in ServiceNow, or to one of the states the message names.
+- `403` or `404` on `/api/sn_chg_rest/change/…`: the integration user lacks `sn_change_read` /
+  `sn_change_write`, or the Change Management API is not active on the instance.
 - The webhook answers `401`: the `X-Choregos-Secret` sent differs from `webhook_secret`, or a property is
   empty (the system log shows `Tranibor: … is not set`).
 - No outbound request in the log: the Business Rule's filter does not match the incident's assignment

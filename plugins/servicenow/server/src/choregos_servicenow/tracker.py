@@ -6,6 +6,9 @@ against that page. An item's key is its number (`INC0010001`, `RITM0010001`, `CH
 
 Everything Tranibor writes here is a WORK NOTE (internal): a customer-visible comment goes through
 `add_comment`, which a person approves.
+
+A change request's state moves through the Change Management API, only to a state its change model
+reaches from where it stands (graalsystems/tranibor-agents#24): nothing walks it past its approvals.
 """
 
 from __future__ import annotations
@@ -14,12 +17,16 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+import structlog
+
 from .client import MAX_ROWS, ServiceNowClient
 from .errors import Refused
 from .query import Filter, Op, Query, eq
 from .tables import TRACKER_TABLES, UPDATABLE_FIELDS, is_sys_id, table_of_number
 from .tools import ServiceNowTools, marker_of, text_key, unkeyed
 from .webhook import CLOSED_STATES, parse, verify
+
+log = structlog.get_logger("choregos_servicenow.tracker")
 
 _STATUS = re.compile(r"\[choregos-status:([A-Za-z0-9._:-]{1,80})\]")
 _ANY_MARKER = re.compile(r"\[choregos(?:-status)?:([A-Za-z0-9._:-]{1,80})\]")
@@ -30,6 +37,9 @@ _CLOSE: dict[str, tuple[str, str | None]] = {
     "sc_req_item": ("Closed Complete", None),
     "change_request": ("Closed", "successful"),
 }
+#: The most keys `tracker_list_candidates` answers (`plugin-tracker-profile.schema.json` of the core:
+#: `limit` at most 200, `keys` at most 200 items).
+CANDIDATES_BOUND = 200
 
 
 def iso(value: Any) -> str | None:
@@ -154,8 +164,22 @@ class Tracker:
             raise Refused(f"{status!r} closes the item: use tracker_close")
         if row["fields"].get("state") == value:
             return {"key": key, "changed": False, "state": choices[value], "ignored": ignored}
-        await self.client.update(table, row["sys_id"], {"state": value})
+        if table == "change_request":
+            await self._move_change(row, value, choices[value], {})
+        else:
+            await self.client.update(table, row["sys_id"], {"state": value})
         return {"key": key, "changed": True, "state": choices[value], "ignored": ignored}
+
+    async def _move_change(self, row: dict[str, Any], value: str, label: str, also: dict[str, Any]) -> None:
+        """Through the Change Management API, to a state the change's model reaches from its current one;
+        any other is refused before anything is written, naming those it reaches."""
+        current = str(row["fields"].get("state"))
+        reachable = await self.client.change_next_states(row["sys_id"], current)
+        if value not in reachable:
+            here = row["display"].get("state", current)
+            said = ", ".join(reachable.values()) or "none"
+            raise Refused(f"{label!r} is not reachable from {here!r} on this change's model; it reaches: {said}")
+        await self.client.update_change(row["sys_id"], {"state": value, **also})
 
     async def comment(self, key: str, markdown: str, action_key: str | None = None) -> dict[str, Any]:
         table, row = await self._item(key)
@@ -189,17 +213,30 @@ class Tracker:
             values["close_notes"] = notes
         else:
             values["work_notes"] = notes
+        if table == "change_request":
+            choices = await self.client.choices(table)
+            state = values.pop("state")
+            await self._move_change(row, state, choices.get(state, label), values)
+            return {"key": key, "closed": True, "state": choices.get(state, label)}
         updated = await self.client.update(table, row["sys_id"], values)
         return {"key": key, "closed": True, "state": updated["display"].get("state", value)}
 
     async def list_candidates(self, tables: list[str] | None = None, limit: int = MAX_ROWS) -> dict[str, Any]:
-        """Active items in the assignment queue (`SERVICENOW_ASSIGNMENT_GROUPS`), oldest first."""
+        """Open items in the assignment queue (`SERVICENOW_ASSIGNMENT_GROUPS`), the most recently updated
+        first across the tables, at most `limit` (bounded by `CANDIDATES_BOUND`).
+
+        Each table is read in pages up to that bound, newest first, so a new item is polled whatever waits
+        behind it (graalsystems/tranibor-agents#25); `total` is how many the queue holds, and `truncated`
+        says the bound left some out."""
         groups = self.client.settings.assignment_groups
         if not groups:
             return {"keys": [], "reason": "no assignment group configured"}
+        bound = max(1, min(limit, CANDIDATES_BOUND))
         ids = [g for g in groups if is_sys_id(g)]
         names = [g for g in groups if not is_sys_id(g)]
-        keys: list[str] = []
+        found: list[dict[str, Any]] = []
+        total: int | None = 0
+        truncated = False
         for table in tables or list(TRACKER_TABLES):
             if table not in TRACKER_TABLES:
                 raise Refused(f"{table} is not a tracker table ({', '.join(TRACKER_TABLES)})")
@@ -208,12 +245,24 @@ class Tracker:
                 alternatives.append(Filter(field="assignment_group", op=Op.in_, value=ids))
             if names:
                 alternatives.append(Filter(field="assignment_group.name", op=Op.in_, value=names))
-            query = Query(table).where(eq("active", "true")).any_of(*alternatives).order("sys_created_on")
-            rows = await self.client.list_records(table, query, fields=["number", "state"], limit=limit)
-            keys.extend(
-                str(r["fields"]["number"]) for r in rows if str(r["fields"].get("state")) not in CLOSED_STATES[table]
-            )
-        return {"keys": keys[: max(1, min(limit, MAX_ROWS))]}
+            # An incident stays active once resolved: the closing states are left out by the query, so
+            # neither a page nor the total counts them.
+            open_only = [Filter(field="state", op=Op.ne, value=v) for v in sorted(CLOSED_STATES[table])]
+            query = Query(table).where(eq("active", "true"), *open_only).any_of(*alternatives)
+            query.order("sys_updated_on", descending=True)
+            read = await self.client.read(table, query, fields=["number", "sys_updated_on"], bound=bound)
+            found.extend(read.rows)
+            truncated = truncated or read.truncated
+            total = None if total is None or read.total is None else total + read.total
+        found.sort(key=lambda r: str(r["fields"].get("sys_updated_on") or ""), reverse=True)
+        keys = [str(r["fields"]["number"]) for r in found[:bound]]
+        truncated = truncated or len(found) > bound
+        answer: dict[str, Any] = {"keys": keys, "truncated": truncated}
+        if total is not None:
+            answer["total"] = total
+        if truncated:
+            log.warning("candidates_truncated", keys=len(keys), total=total, bound=bound)
+        return answer
 
     def parse_event(self, headers: Mapping[str, str], body: str) -> dict[str, Any]:
         secret = self.client.settings.webhook_secret

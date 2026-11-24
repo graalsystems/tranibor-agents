@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.12, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.13, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.12.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.13.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -67,7 +67,7 @@ connector is this plugin's server, `{kind: "plugin:servicenow/servicenow", scene
 `tranibor plugin validate` checks them (their agent, their doors, their connector naming a server of
 this plugin) and `pack` ships them; the installer keeps them and never plays them. The server's file
 declares how the platform runs it on its fake, `fake: {env: {SERVICENOW_FAKE: "1"}, scenes: [default]}`:
-in a live cell, where the deployment sets `CHOREGOS_EVAL_FAKE_SCENES=1`, the platform runs beside the
+in a live cell, where the deployment sets `TRANIBOR_EVAL_FAKE_SCENES=1` (`CHOREGOS_EVAL_FAKE_SCENES` while the rename's window lasts), the platform runs beside the
 server an eval instance with exactly that variable and its own token, nothing of the configuration and no
 egress. In a scripted cell, the core reaches the server on a fake registered in its process (in the core's
 CI, a recording of this server's fake).
@@ -80,7 +80,7 @@ Three tests hold them here:
   server to its fake, with the platform's token, and no configuration field reaches it;
 - `server/tests/test_matrix_cases.py`, in the core's workspace (CI's `matrix` job), as the core's scripted
   matrix plays them: the cases found through this tree's `plugins/` as the offline plugins
-  (`CHOREGOS_PLUGINS_OFFLINE`), this server's own app registered as the fake of `servicenow/servicenow`
+  (`TRANIBOR_PLUGINS_OFFLINE`, formerly `CHOREGOS_PLUGINS_OFFLINE`), this server's own app registered as the fake of `servicenow/servicenow`
   (`use_fake_plugin_server`, started with the `fake` variables and the platform's token), each case in each
   of its cells through the core's real doors (`eval_doors.play`: the run's MCP server, and the script with
   `python3 -S`, the generated client and the tool bridge), then the core's judge; and the assertions that
@@ -248,6 +248,27 @@ in the fake and under a unit test: a request item's states live on `task`; `sys_
 user (403) and `sys_journal_field` answers it no row; a write the instance will not apply answers 200 with
 the old value; a journal header's date is in the reading user's time zone; a refused write's reason is in
 the error's `detail`.
+
+The change request's move along its change model and the queue poll's paging (0.2.12, findings #24 and #25)
+are under unit tests and in this suite (`test_a_change_request_is_filed_once_and_its_state_model_is_said`,
+`test_reads_say_what_their_bound_left_out`), but the suite has **not been run on an instance since**: what
+Change Management roles the integration user needs (`sn_change_read`, `sn_change_write`) is unconfirmed.
+
+### What is proven on a deployment, and what is not
+
+The core's own live suite (`tests/live/test_servicenow_live.py` in graalsystems/tranibor, `-m live`; the
+server runs by hand and the test reads `TRANIBOR_LIVE_SERVICENOW_MCP_URL`, `_MCP_TOKEN` and
+`_WEBHOOK_SECRET`) drives the core's `PluginTracker` through this server to the same instance (4 passed,
+2026-11-21, server 0.1.3). On 2026-11-24 the governed path ran end to end on the Diametral dev cluster
+(core 0.29.0, server 0.2.9, the same instance, core story S80-20): the plugin installed from the `tranibor`
+source with a second administrator's approval, the connector configured in the console, a project from the
+template, a new incident opened as a work item by the poll, triaged by the agent (reads only), the review
+settled, `servicenow.apply_triage` approved by a second person and applied once (`update_record` then
+`add_work_note`, read back on the instance). It found graalsystems/tranibor-agents#34, #36, #37 and #38, all
+fixed. Not proven there: the Business Rule's delivery to `POST /webhooks/plugins/…` (the work item came from
+the poll), OAuth client credentials on the cluster (Basic was used), a nightly run, 0.2.12's change-request
+move and queue paging, and a human's governance (the approvers were test accounts driven by an agent). No
+finding is open.
 
 The image: `docker build -t servicenow-mcp plugins/servicenow/server` (non-root, port 8080, exec-form
 entry point). CI builds, signs and publishes it and writes its digest into `servers/servicenow.yaml`.

@@ -3,8 +3,8 @@ id: connector.mcp.servicenow
 title: Connect a ServiceNow instance
 applies_to: {connector: mcp/servicenow}
 audience: org_admin
-version: 3
-reviewed: 2026-11-21
+version: 4
+reviewed: 2026-11-24
 vendor_docs:
   - {title: "Configure OAuth client credentials grant (inbound)", url: "https://www.servicenow.com/docs/bundle/zurich-platform-security/page/administer/security/task/client-credentials.html"}
   - {title: "Table API", url: "https://www.servicenow.com/docs/bundle/zurich-api-reference/page/integrate/inbound-rest/concept/c_TableAPI.html"}
@@ -35,7 +35,9 @@ fields:
 - This procedure was run on a Personal Developer Instance of the **Australia** release (patch 7) on
   2026-11-21, by the server's live suite (`server/tests/live`), with both authentications. What that run did
   not reach: the Business Rule's delivery to Tranibor itself (the instance needs a public URL for the
-  webhook; the rule's requests were read from its outbound HTTP log instead).
+  webhook; the rule's requests were read from its outbound HTTP log instead). The whole path, from this
+  procedure's role and Basic authentication to an approved write-back, was then run on a Tranibor
+  deployment on 2026-11-24 (core 0.29.0, plugin 0.2.9): the webhook delivery and OAuth were not part of it.
 
 ## At ServiceNow
 

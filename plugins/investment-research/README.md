@@ -35,7 +35,7 @@ marketdata}`), which the installer does not enforce.
 1. **Install the plugin** from the `tranibor` source (Catalogue, **Plugins**, or the deployment's
    `defaultPlugins`, see the [root README](../../README.md#installing)). Projects are created from the
    template `plugin:investment-research/investment-research`.
-2. **Map the job image.** `CHOREGOS_JOB_IMAGES` (or the chart's
+2. **Map the job image.** `TRANIBOR_JOB_IMAGES` (`CHOREGOS_JOB_IMAGES` is still read during the rename window; or the chart's
    `global.images.jobs.investment-research`) maps `investment-research` to
    `ghcr.io/graalsystems/tranibor-investment-research:<core version>`. On a core older than the one whose
    release builds that image, map it to that core's runner image, which still carries `choregos-quant`.

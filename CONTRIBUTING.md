@@ -91,12 +91,14 @@ None of its variables may be `TRANIBOR_*`, `CHOREGOS_*` or one that `config_sche
 (`validate` refuses both), so no administrator switches a server to its fake. The server must start on its
 fake with exactly these variables plus the platform's token, `TRANIBOR_SERVER_TOKEN` (`CHOREGOS_SERVER_TOKEN` from a
 core before the rename: a server reads both, `tests/test_server_token.py`), and nothing of its
-configuration: that is how the platform starts it.
+configuration: that is how the platform starts it. During the rename's R4 window (core ADR 0176) the
+server's Secret gives the token under both names (core S80-35); read `TRANIBOR_SERVER_TOKEN` first and fall back
+to the former, since the core removes the former when the window closes.
 
 How the core's matrix plays them:
 
-- **Scripted cell** (the core's CI, `CHOREGOS_FAKES=1`): the matrix names a case `plugin:<plugin>/<file
-  stem>` and loads it from the offline plugins (`CHOREGOS_PLUGINS_OFFLINE`, else the core's
+- **Scripted cell** (the core's CI, `TRANIBOR_FAKES=1`): the matrix names a case `plugin:<plugin>/<file
+  stem>` and loads it from the offline plugins (`TRANIBOR_PLUGINS_OFFLINE`, else the core's
   `plugins/offline/`). It reaches the case's server as the broker does, over MCP with a bearer token, on a
   fake registered for it in the process (`choregos_adapters.fakes.plugin_servers.use_fake_plugin_server`):
   the core's CI registers a recording of the server's fake (`FakePluginServer`); without a registered fake
@@ -104,12 +106,12 @@ How the core's matrix plays them:
   only, their access, `human_approval` never lowered, the platform's arguments (`action_key`) filled on an
   executed write.
 - **Live cell**: the eval organisation installs the plugin. Where the deployment sets
-  `CHOREGOS_EVAL_FAKE_SCENES=1`, the platform runs beside the server an eval instance (the same image,
+  `TRANIBOR_EVAL_FAKE_SCENES=1`, the platform runs beside the server an eval instance (the same image,
   `fake.env` and the platform's token, no configuration, no egress), and the matrix's seeding binds the
   connector nobody configured to it.
 
 This repository plays its cases the scripted way (CI's `matrix` job):
-`plugins/servicenow/server/tests/test_matrix_cases.py` points `CHOREGOS_PLUGINS_OFFLINE` at `plugins/`,
+`plugins/servicenow/server/tests/test_matrix_cases.py` points `TRANIBOR_PLUGINS_OFFLINE` (or its former name) at `plugins/`,
 registers the server's own app on its fake (`build_app` with `fake.env` and the token, behind
 `httpx.ASGITransport`), plays each case in each of its cells with the core's `eval_doors.play` and judges
 it with the core's `judge`. From a core checkout, v0.23.2 or later:

@@ -13,7 +13,7 @@ env:
   # the graalsystems/tranibor v0.29.0 tag (ADRs 0196-0202 and ADR 0181's `requires.extensions` since
   # 0.28.1; 0.29.0 closed ADR 0181's windows: the evidence facts software-delivery 1.4.0 names).
   # publish.yml pins the same commit.
-  CHOREGOS_REF: 5dd7ee79196d16b88523a47703d3f521674ab254
+  CHOREGOS_REF: 85e7ed7167d0dac40031dd8072ea92081e1b6daf
 
 jobs:
   servers:

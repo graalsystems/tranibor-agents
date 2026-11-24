@@ -138,3 +138,20 @@ async def test_a_refusal_says_the_instance_s_reason() -> None:
         await client.update("change_request", "a" * 32, {"state": "-4"})
     assert raised.value.status == 403
     await client.aclose()
+
+
+@respx.mock
+async def test_no_session_cookie_of_an_earlier_call_is_sent_back() -> None:
+    """The instance sets its session cookies on every answer; the next call must not carry them (a call
+    that sent them back after a minute idle got no answer from the Australia PDI, dev 2026-11-24)."""
+    session = {"Set-Cookie": "JSESSIONID=abc123; Path=/; Secure; HttpOnly"}
+    route = respx.get(f"{BASE}/api/now/table/incident").mock(
+        return_value=httpx.Response(200, json={"result": [ROW]}, headers=session)
+    )
+    client = ServiceNowClient(Settings(base_url=BASE, auth="basic", username="u", password=SecretStr("p")))
+
+    await client.list_records("incident", Query("incident"))
+    await client.list_records("incident", Query("incident"))
+    assert route.call_count == 2
+    assert all("cookie" not in call.request.headers for call in route.calls)
+    assert route.calls[1].request.headers["authorization"].startswith("Basic ")

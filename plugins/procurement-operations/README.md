@@ -12,7 +12,7 @@ It does not require `procurement`: nothing here references an agent, skill or te
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `procurement-operations` 0.3.2, core `>=0.28.1,<1.0.0` |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `procurement-operations` 0.3.3, core `>=0.28.1,<1.0.0` |
 | Agent | [`agents/supplier-file-checker.yaml`](agents/supplier-file-checker.yaml) | catalogue role `structure`: copies a supplier's identity and dated documents into `supplier_file` |
 | Agent | [`agents/renewal-analyst.yaml`](agents/renewal-analyst.yaml) | catalogue role `renewal_memo`: writes `renewal_memo_markdown` for one contract ending soon (`get_contract` only) |
 | Agent | [`agents/request-qualifier.yaml`](agents/request-qualifier.yaml) | catalogue role `qualify`: reads a purchase request against the house policy and the framework agreements, proposes a route in `qualification` and a `brief_markdown` |
@@ -22,6 +22,13 @@ It does not require `procurement`: nothing here references an agent, skill or te
 | Server | [`servers/purchasing.yaml`](servers/purchasing.yaml), source [`server/`](server/PROFILE.md) | the MCP server `purchasing`: eleven operations of a fixed profile, served by Odoo 19 and 20 and by a seeded fake |
 | Procedure | [`procedures/connector.mcp.purchasing.md`](procedures/connector.mcp.purchasing.md) | how the server is connected to Odoo: a dedicated user, the least rights, an API key |
 | Evals | [`evals/`](evals) | instruction checks and live cases of each agent, and the three matrix cases of [`evals/matrix/`](evals/matrix) (named `plugin:procurement-operations/<file stem>`) |
+
+## What version 0.3.3 fixes
+
+What the core's second night found (core S85-14, 2026-11-24): on Odoo 20, `create_purchase_request` failed
+with `Expected singleton: uom.uom()`. A line without a product has no unit to derive; Odoo 19 accepts it, Odoo 20
+does not. Every line now carries Odoo's reference unit ("Units", `uom.product_uom_unit`), by the field the version
+has (`product_uom_id`, else `product_uom`), asked of Odoo once (`server/tests/test_odoo_backend.py`).
 
 ## What version 0.3.2 fixes
 
@@ -110,7 +117,7 @@ attested. The workflow opens nothing in the purchasing system. The agent must al
 
 ```sh
 tranibor plugin validate plugins/procurement-operations
-tranibor plugin pack plugins/procurement-operations -o procurement-operations-0.3.2.tar.gz   # same bytes every time
+tranibor plugin pack plugins/procurement-operations -o procurement-operations-0.3.3.tar.gz   # same bytes every time
 ```
 
 The server's own checks, in `server/` (the `servers` job): `uv sync --all-extras --dev`, `uv run ruff check .`,

@@ -52,7 +52,7 @@ def test_the_plugin_loads_with_the_assistant() -> None:
     plugin = load_directory(PLUGIN)
     assert "purchasing-desk" in plugin.assistants
     assert "assistants/purchasing-desk.yaml" in plugin.files
-    assert plugin.version == "0.3.2"
+    assert plugin.version == "0.3.3"
 
 
 def test_the_assistant_is_refused_when_its_agent_does_not_converse(tmp_path: Path) -> None:

@@ -186,11 +186,13 @@ def _matches(actual: Any, op: str, expected: str) -> bool:
 class FakeServiceNow:
     """Callable as an `httpx.MockTransport` handler. Every request is kept in `requests`.
 
-    Four switches play what a real instance does to a user without the plugin's role (each seen on an
+    Five switches play what a real instance does to a user without the plugin's role (each seen on an
     Australia instance): `journal_readable = False` filters every `sys_journal_field` row out (an answer of
     200 and no row), `choices_readable = False` refuses `sys_choice` (403), `unwritable` holds the
-    `(table, field)` a write keeps silently (an answer of 200 and the old value), and `tz_offset_hours` is
-    the reading user's time zone, in which every date label and journal header is rendered.
+    `(table, field)` a write keeps silently (an answer of 200 and the old value), `change_api_readable =
+    False` is a user without `sn_change_read`, to whom the Change Management API's next states answer 200
+    and `available_states: [null]`, and `tz_offset_hours` is the reading user's time zone, in which every
+    date label and journal header is rendered.
 
     `seed_file`: a JSON file (`seed_file.py`) that replaces the built-in seed, so a demo shows its own
     incidents; none, the built-in seed."""
@@ -199,6 +201,7 @@ class FakeServiceNow:
         self.tables: dict[str, dict[str, dict[str, Any]]] = {}
         self.journal_readable = True
         self.choices_readable = True
+        self.change_api_readable = True
         self.unwritable: set[tuple[str, str]] = set()
         self.tz_offset_hours = 0.0
         self.requests: list[httpx.Request] = []
@@ -359,6 +362,9 @@ class FakeServiceNow:
         if row is None:
             return httpx.Response(404, json={"error": {"message": "No Record found"}})
         reachable = CHANGE_TRANSITIONS.get(str(row.get("state")), ())
+        if request.method == "GET" and parts[1:] == ["nextstates"] and not self.change_api_readable:
+            body = {"available_states": [None], "state_transitions": [], "state_label": {"null": None}}
+            return httpx.Response(200, json={"result": body})
         if request.method == "GET" and parts[1:] == ["nextstates"]:
             states = [str(row.get("state")), *reachable]
             labels = {

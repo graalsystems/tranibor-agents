@@ -3,7 +3,7 @@ id: connector.mcp.servicenow
 title: Connect a ServiceNow instance
 applies_to: {connector: mcp/servicenow}
 audience: org_admin
-version: 5
+version: 6
 reviewed: 2026-11-24
 vendor_docs:
   - {title: "Configure OAuth client credentials grant (inbound)", url: "https://www.servicenow.com/docs/bundle/zurich-platform-security/page/administer/security/task/client-credentials.html"}
@@ -38,23 +38,32 @@ fields:
   webhook; the rule's requests were read from its outbound HTTP log instead). The whole path, from this
   procedure's role and Basic authentication to an approved write-back, was then run on a Tranibor
   deployment on 2026-11-24 (core 0.29.0, plugin 0.2.9): the webhook delivery and OAuth were not part of it.
+  The same day (plugin 0.2.15), the live suite passed 18 tests on that instance as the non-admin user this
+  page builds, by basic authentication and by OAuth client credentials, with exactly the roles of steps 1
+  to 3. The Business Rule's delivery to Tranibor is still not proven: tried against a deployment whose API
+  resolves only on a private network, the instance could not resolve its name (see When it fails).
 
 ## At ServiceNow
 
 1. **The integration user.** System Security, Users, **New**: user ID `choregos.integration`, check
-   **Web service access only** and **Internal Integration User**. Do not give it `admin` or `itil`.
+   **Web service access only** and **Internal Integration User**. Do not give it `admin` or `itil`. Give it
+   `sn_change_read` (the Change Management API, see Permissions); not `sn_change_write`, which the server
+   does not need.
 2. **The custom role.** System Security, Roles, **New**: `choregos_integration`. Give it to the
    integration user only. Its rights are listed in Permissions below.
 3. **The OAuth inbound integration** (auth `oauth`).
    - On Washington DC and later, set the system property
      `glide.oauth.inbound.client.credential.grant_type.enabled` to `true` (create it as a true/false
-     property if it does not exist).
+     property if it does not exist). The Australia PDI did not hold it: without it, or with `false`,
+     `/oauth_token.do` answers `401 access_denied` to the right client ID and secret.
    - System OAuth, Application Registry, **New**, **Create an OAuth API endpoint for external clients**
      (on newer releases: **New Inbound Integration Experience**, **OAuth - Client credentials grant**).
      Name it `Tranibor`. Set **OAuth Application User** to `choregos.integration`, so every call runs with
      the custom role and nothing more. Save, then copy the **Client ID** and **Client Secret**.
      On Australia the registry record is an **OAuth Client** whose **Inbound Grant Type** is **Client
-     Credentials** (`inbound_grant_type = client_credential`).
+     Credentials** (`oauth_entity`: `type = client`, `inbound_grant_type = client_credential`, `user` = the
+     integration user). Proven there on 2026-11-24: the token runs as `choregos.integration`, and the live
+     suite passed with it.
    - On an older release, or a PDI without the client credentials grant, use auth `basic` with the
      integration user's password instead. **From the release that enforces the `SNCRestrictBasicAuth` gate
      (Australia does), basic authentication of the API needs the role `snc_basic_auth_api_access`**: give it
@@ -142,11 +151,13 @@ the three marked *role added*):
 - **The Change Management API** (`/api/sn_chg_rest/change`): a change's
   state moves through it, to a state its change model reaches from the current one (`GET …/nextstates`,
   then `PATCH …/change/{sys_id}`), never through the Table API, whose write of a change's `state` the
-  model's Business Rule refuses. Give the integration user `sn_change_read` and `sn_change_write`, the
-  roles that API's ACLs ask for (to be confirmed on your release). Proven on the Australia instance on 2026-11-24 (plugin 0.2.12, as the
-  instance's admin, by basic authentication): a change moves New to Assess through it, an unreachable state
-  and the close are refused before any write; file the change with an assignment group, or the change model
-  refuses New to Assess. *Not yet proven*: that these two roles suffice for a non-admin integration user.
+  model's Business Rule refuses. Give the integration user the role that API asks for: `sn_change_read`. Proven on the Australia instance on 2026-11-24 (plugin 0.2.15,
+  as `choregos.integration`, by basic authentication and by OAuth): a change moves New to Assess through
+  it, an unreachable state and the close are refused before any write; file the change with an assignment
+  group, or the change model refuses New to Assess. Without `sn_change_read` the API answers the next
+  states with 200 and `available_states: [null]` (no 403), and the server refuses the move naming the
+  role. `sn_change_write` is not needed: the move's `PATCH` passes on the role's `change_request` write
+  ACLs. `sn_change_read` brings contained roles of its own (`cmdb_read`, `view_changer`, …).
 - On that instance the record-level ACLs were new ones under the tables' own names (`incident`,
   `sc_req_item`, `change_request`, `problem`, `kb_knowledge`, `cmdb_ci`, `cmdb_rel_ci`, `sys_user_group`,
   `sys_choice`, `sys_journal_field`, `sys_user`: read; `incident`, `sc_req_item`, `change_request`: write;
@@ -206,11 +217,16 @@ organisation can only make that stricter.
 - `'<state>' is not reachable from '<state>' on this change's model; it reaches: …`: a change moves only
   along its change model's transitions, and closes only from Review, once its approvals are given on the
   instance. Move it there in ServiceNow, or to one of the states the message names.
-- `403` or `404` on `/api/sn_chg_rest/change/…`: the integration user lacks `sn_change_read` /
-  `sn_change_write`, or the Change Management API is not active on the instance.
+- `the Change Management API answered no next state … lacks the role sn_change_read`: give the
+  integration user `sn_change_read`. A `404` on `/api/sn_chg_rest/change/…`: the Change Management API
+  is not active on the instance.
 - The webhook answers `401`: the `X-Choregos-Secret` sent differs from `webhook_secret`, or a property is
   empty (the system log shows `Tranibor: … is not set`).
 - No outbound request in the log: the Business Rule's filter does not match the incident's assignment
   group, or the rule is inactive.
+- The outbound request answered `-1`, `java.net.UnknownHostException` (the ECC queue's input record holds
+  the exception): Tranibor's API name does not resolve from the instance's data centre. The webhook URL
+  must be a public name; a deployment reachable only on a private network gets no delivery, and the poll
+  (step 6) is the only path.
 - A timeout from Tranibor: the egress rule of the plugin's server must allow the instance's host.
 - The VIP flag is always false: the role cannot read `sys_user.vip`.

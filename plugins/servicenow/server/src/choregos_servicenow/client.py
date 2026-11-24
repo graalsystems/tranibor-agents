@@ -277,13 +277,18 @@ class ServiceNowClient:
         result = await self._request("GET", f"/api/sn_chg_rest/change/{sys_id}/nextstates")
         if not isinstance(result, dict):
             raise ServiceNowError(f"the Change Management API's next states are not an object: {type(result).__name__}")
+        available = result.get("available_states") or []
+        if any(v is None for v in available):
+            # What the Australia PDI answered a user without `sn_change_read` (2026-11-24): 200, and
+            # `available_states: [null]`, not a 403.
+            raise ServiceNowError(
+                "the Change Management API answered no next state (`available_states: [null]`): "
+                "the integration user lacks the role `sn_change_read`",
+                403,
+            )
         labels = {str(k): str(v) for k, v in (result.get("state_label") or {}).items()}
         known = await self.choices("change_request")
-        return {
-            str(v): known.get(str(v)) or labels.get(str(v)) or str(v)
-            for v in result.get("available_states") or []
-            if str(v) != str(current)
-        }
+        return {str(v): known.get(str(v)) or labels.get(str(v)) or str(v) for v in available if str(v) != str(current)}
 
     async def update_change(self, sys_id: str, values: dict[str, Any]) -> dict[str, Any]:
         """A change request's fields, its state included, written through the Change Management API

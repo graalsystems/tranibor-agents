@@ -9,6 +9,7 @@ role and as one holding `itil`, by basic authentication and by OAuth client cred
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 
 from mcp import Client
@@ -171,6 +172,9 @@ async def test_a_change_request_is_filed_once_and_its_state_model_is_said(mcp: L
     arguments = {
         "short_description": f"{TAG} change", "description": "Live suite.", "implementation_plan": "Reboot.",
         "backout_plan": "None.", "test_plan": "Ping.", "action_key": key_of(mcp, "change"),
+        # The change model's business rule refuses New -> Assess while the assignment group is empty (seen
+        # on an Australia PDI, 2026-11-24): a change the agent files names its group, as the procedure does.
+        "assignment_group": await group_id(mcp, os.environ.get("TRANIBOR_LIVE_SERVICENOW_GROUP") or GROUP),
     }  # fmt: skip
     first = await mcp.call("create_change_request", **arguments)
     again = await mcp.call("create_change_request", **arguments)

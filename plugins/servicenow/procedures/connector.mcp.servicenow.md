@@ -3,7 +3,7 @@ id: connector.mcp.servicenow
 title: Connect a ServiceNow instance
 applies_to: {connector: mcp/servicenow}
 audience: org_admin
-version: 4
+version: 5
 reviewed: 2026-11-24
 vendor_docs:
   - {title: "Configure OAuth client credentials grant (inbound)", url: "https://www.servicenow.com/docs/bundle/zurich-platform-security/page/administer/security/task/client-credentials.html"}
@@ -143,8 +143,10 @@ the three marked *role added*):
   state moves through it, to a state its change model reaches from the current one (`GET …/nextstates`,
   then `PATCH …/change/{sys_id}`), never through the Table API, whose write of a change's `state` the
   model's Business Rule refuses. Give the integration user `sn_change_read` and `sn_change_write`, the
-  roles that API's ACLs ask for (to be confirmed on your release). *Not yet proven on an instance* (plugin 0.2.12): the Australia run of
-  0.2.4 predates it.
+  roles that API's ACLs ask for (to be confirmed on your release). Proven on the Australia instance on 2026-11-24 (plugin 0.2.12, as the
+  instance's admin, by basic authentication): a change moves New to Assess through it, an unreachable state
+  and the close are refused before any write; file the change with an assignment group, or the change model
+  refuses New to Assess. *Not yet proven*: that these two roles suffice for a non-admin integration user.
 - On that instance the record-level ACLs were new ones under the tables' own names (`incident`,
   `sc_req_item`, `change_request`, `problem`, `kb_knowledge`, `cmdb_ci`, `cmdb_rel_ci`, `sys_user_group`,
   `sys_choice`, `sys_journal_field`, `sys_user`: read; `incident`, `sc_req_item`, `change_request`: write;

@@ -72,7 +72,7 @@ class Mcp:
 
 @pytest.fixture
 def http() -> Iterator[TestClient]:
-    env = {"M365_FAKE": "1", "CHOREGOS_SERVER_TOKEN": TOKEN}
+    env = {"M365_FAKE": "1", "TRANIBOR_SERVER_TOKEN": TOKEN}
     app = build_app(Settings.from_env(env), clock=clock)
     with TestClient(app, base_url=BASE, headers={"Authorization": f"Bearer {TOKEN}"}) as client:
         yield client

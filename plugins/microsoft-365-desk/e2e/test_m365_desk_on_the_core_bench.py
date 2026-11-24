@@ -198,7 +198,7 @@ async def _organisation(platform: Platform, kube: Any, teams: bool = False) -> O
     assert desk["status"] == "deployed", desk
 
     server = OnItsFake(
-        build_app(Settings.from_env({"M365_DESK_FAKE": "1", "CHOREGOS_SERVER_TOKEN": _token(kube)}))
+        build_app(Settings.from_env({"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_TOKEN": _token(kube)}))
     )
     use_plugin_transport(server)
 

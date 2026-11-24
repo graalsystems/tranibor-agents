@@ -128,7 +128,7 @@ async def purchasing() -> AsyncIterator[list[OnItsFake]]:
         environment = {
             **declaration["fake"]["env"],
             "PURCHASING_FAKE_SCENE": scene,
-            "CHOREGOS_SERVER_TOKEN": plugin_servers.EVAL_TOKEN,
+            "TRANIBOR_SERVER_TOKEN": plugin_servers.EVAL_TOKEN,
         }
         started.append(OnItsFake(build_app(Settings.from_env(environment))))
         return started[-1]

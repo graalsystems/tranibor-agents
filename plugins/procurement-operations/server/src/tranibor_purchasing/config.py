@@ -11,9 +11,13 @@ PA-06) then needs `PURCHASING_BASE_URL` (https), `PURCHASING_USERNAME` and the s
 `PURCHASING_DATABASE` is optional (sent as the `X-Odoo-Database` header). Any other value, or none, refuses to
 start. Reading the settings opens no connection.
 
-`CHOREGOS_SERVER_TOKEN` is the platform's (ADR 0096): the bearer token it presents on every call. The
-server refuses to start without it, except on the fake with `CHOREGOS_SERVER_INSECURE_DEV=1` said
+`TRANIBOR_SERVER_TOKEN` is the platform's (ADR 0096): the bearer token it presents on every call. The
+server refuses to start without it, except on the fake with `TRANIBOR_SERVER_INSECURE_DEV=1` said
 explicitly, for a local demo.
+
+The core names the pod's variable `TRANIBOR_SERVER_TOKEN` since its `TRANIBOR_*` rename (core ADR 0176,
+S75-04); an older core sets `CHOREGOS_SERVER_TOKEN`, still read when the new name is absent (and
+`CHOREGOS_SERVER_INSECURE_DEV` likewise).
 """
 
 from __future__ import annotations
@@ -25,6 +29,16 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 
 from .backends.fake import scene_name
+
+#: The platform's token variable, the current core's name first, then an older core's.
+TOKEN_ENVS = ("TRANIBOR_SERVER_TOKEN", "CHOREGOS_SERVER_TOKEN")
+INSECURE_DEV_ENVS = ("TRANIBOR_SERVER_INSECURE_DEV", "CHOREGOS_SERVER_INSECURE_DEV")
+
+
+def _first(source: Mapping[str, str], names: tuple[str, ...]) -> str:
+    """The value of the first of `names` set to something, else empty."""
+    return next((source[name] for name in names if source.get(name)), "")
+
 
 #: The backends the descriptor's `config_schema` offers, and the ones this version can run.
 BACKENDS = ("odoo",)
@@ -41,7 +55,7 @@ class Settings(BaseModel):
     port: int = 8080
     #: The bearer token the platform presents on every call but the health probe (ADR 0096).
     server_token: SecretStr | None = None
-    #: `CHOREGOS_SERVER_INSECURE_DEV=1`: no token, accepted on the fake only.
+    #: `TRANIBOR_SERVER_INSECURE_DEV=1`: no token, accepted on the fake only.
     insecure_dev: bool = False
     #: The real system's connection (odoo): the only host the server reaches is the one in `base_url`.
     base_url: str | None = None
@@ -84,17 +98,18 @@ class Settings(BaseModel):
         if self.fake and self.insecure_dev:
             return None
         raise ValueError(
-            "CHOREGOS_SERVER_TOKEN is not set: the server refuses to start without the platform's token "
-            "(only PURCHASING_FAKE=1 with CHOREGOS_SERVER_INSECURE_DEV=1 runs without it)"
+            "TRANIBOR_SERVER_TOKEN (or an older core's CHOREGOS_SERVER_TOKEN) is not set: the server refuses "
+            "to start without the platform's token (only PURCHASING_FAKE=1 with TRANIBOR_SERVER_INSECURE_DEV=1 runs "
+            "without it)"
         )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
         source = os.environ if env is None else env
-        raw_token = source.get("CHOREGOS_SERVER_TOKEN")
+        raw_token = _first(source, TOKEN_ENVS)
         server_token = SecretStr(raw_token) if raw_token else None
         port = int(source.get("PORT", "8080"))
-        insecure_dev = source.get("CHOREGOS_SERVER_INSECURE_DEV", "") == "1"
+        insecure_dev = _first(source, INSECURE_DEV_ENVS) == "1"
         if source.get("PURCHASING_FAKE", "") in ("1", "true", "yes"):
             scene = scene_name(source.get("PURCHASING_FAKE_SCENE") or "default")
             return cls(fake=True, scene=scene, port=port, server_token=server_token, insecure_dev=insecure_dev)

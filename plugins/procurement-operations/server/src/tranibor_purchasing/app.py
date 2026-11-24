@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The HTTP server: MCP (streamable HTTP) at `/mcp` and `GET /healthz`.
 
-Every path but `/healthz` needs `Authorization: Bearer $CHOREGOS_SERVER_TOKEN`, the token the platform
+Every path but `/healthz` needs `Authorization: Bearer $TRANIBOR_SERVER_TOKEN`, the token the platform
 presents on each call (ADR 0096); the comparison is constant-time.
 
 Every tool the server serves is declared in `servers/purchasing.yaml` with its access; the platform refuses
@@ -321,7 +321,7 @@ def build_app(settings: Settings, backend: Backend | None = None) -> Starlette:
     if token is not None:
         app.add_middleware(BearerGuard, token=token.get_secret_value())
     else:
-        log.warning("insecure_dev", reason="no CHOREGOS_SERVER_TOKEN: every call is accepted (fake only)")
+        log.warning("insecure_dev", reason="no TRANIBOR_SERVER_TOKEN: every call is accepted (fake only)")
     app.state.runtime = runtime
     app.state.mcp = server
     return app

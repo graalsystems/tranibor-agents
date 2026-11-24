@@ -28,7 +28,7 @@ ODOO_ENV = {
     "PURCHASING_DATABASE": "acme",
     "PURCHASING_USERNAME": "purchasing-bot",
     "PURCHASING_API_KEY": KEY,
-    "CHOREGOS_SERVER_TOKEN": "platform-token-for-tests",
+    "TRANIBOR_SERVER_TOKEN": "platform-token-for-tests",
 }
 
 

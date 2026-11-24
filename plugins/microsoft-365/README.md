@@ -22,7 +22,7 @@ tranibor plugin pack plugins/microsoft-365 -o microsoft-365-0.1.4.tar.gz   # sam
 The connector declares `identity_modes: [user_consent]`: each person connects their own Microsoft 365
 account once in the console (`/me/connected-accounts`), the platform seals the refresh token in their
 personal space and draws an access token for each call. It sends that token to the server in
-`X-Choregos-User-Token`, next to the platform's own bearer token (`CHOREGOS_SERVER_TOKEN`), which
+`X-Choregos-User-Token`, next to the platform's own bearer token (`TRANIBOR_SERVER_TOKEN`), which
 authenticates Tranibor to the server.
 
 - The person's token is the only credential the server sends to Graph, and only to
@@ -80,5 +80,5 @@ person's token on the fake.
 cd plugins/microsoft-365/server
 uv sync --all-extras --dev
 uv run ruff check . && uv run mypy --strict src && uv run pytest -q
-M365_FAKE=1 CHOREGOS_SERVER_INSECURE_DEV=1 uv run choregos-microsoft-365   # local demo, port 8080
+M365_FAKE=1 TRANIBOR_SERVER_INSECURE_DEV=1 uv run choregos-microsoft-365   # local demo, port 8080
 ```

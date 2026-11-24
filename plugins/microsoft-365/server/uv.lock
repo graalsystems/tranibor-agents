@@ -111,7 +111,7 @@ wheels = [
 
 [[package]]
 name = "choregos-microsoft-365"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

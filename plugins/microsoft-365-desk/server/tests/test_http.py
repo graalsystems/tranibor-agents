@@ -26,20 +26,20 @@ REAL = {
     "M365_DESK_CLIENT_ID": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     "M365_DESK_CLIENT_SECRET": "s",
     "M365_DESK_MAILBOX": "it-desk@contoso.com",
-    "CHOREGOS_SERVER_TOKEN": TOKEN,
+    "TRANIBOR_SERVER_TOKEN": TOKEN,
 }
 
 
 @pytest.fixture
 def http() -> Iterator[TestClient]:
-    env = {"M365_DESK_FAKE": "1", "CHOREGOS_SERVER_TOKEN": TOKEN}
+    env = {"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_TOKEN": TOKEN}
     with TestClient(build_app(Settings.from_env(env)), base_url=BASE, headers=BEARER) as client:
         yield client
 
 
 def test_healthz_is_open(http: TestClient) -> None:
     response = http.get("/healthz", headers={"Authorization": ""})
-    assert response.json() == {"status": "ok", "fake": True, "version": "0.1.1"}
+    assert response.json() == {"status": "ok", "fake": True, "version": "0.1.2"}
 
 
 @pytest.mark.parametrize(
@@ -78,16 +78,17 @@ def test_a_tool_over_streamable_http(http: TestClient) -> None:
 def test_the_server_refuses_to_start_without_a_token() -> None:
     for env in (
         {"M365_DESK_FAKE": "1"},
-        {"M365_DESK_FAKE": "1", "CHOREGOS_SERVER_TOKEN": ""},
-        {"M365_DESK_FAKE": "1", "CHOREGOS_SERVER_INSECURE_DEV": "true"},
-        {**REAL, "CHOREGOS_SERVER_TOKEN": "", "CHOREGOS_SERVER_INSECURE_DEV": "1"},
+        {"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_TOKEN": ""},
+        {"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_INSECURE_DEV": "true"},
+        {**REAL, "TRANIBOR_SERVER_TOKEN": "", "TRANIBOR_SERVER_INSECURE_DEV": "1"},
     ):
-        with pytest.raises(ValueError, match="CHOREGOS_SERVER_TOKEN"):
+        with pytest.raises(ValueError, match="TRANIBOR_SERVER_TOKEN"):
             build_app(Settings.from_env(env))
 
 
-def test_insecure_dev_runs_the_fake_without_a_token() -> None:
-    settings = Settings.from_env({"M365_DESK_FAKE": "1", "CHOREGOS_SERVER_INSECURE_DEV": "1"})
+@pytest.mark.parametrize("variable", ["TRANIBOR_SERVER_INSECURE_DEV", "CHOREGOS_SERVER_INSECURE_DEV"])
+def test_insecure_dev_runs_the_fake_without_a_token(variable: str) -> None:
+    settings = Settings.from_env({"M365_DESK_FAKE": "1", variable: "1"})
     with TestClient(build_app(settings), base_url=BASE) as client:
         body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
         assert client.post("/mcp", headers=MCP_HEADERS, json=body).status_code == 200
@@ -155,3 +156,26 @@ def test_the_client_secret_never_shows_in_a_refusal() -> None:
     with pytest.raises(ValueError) as refused:
         Settings.from_env({**REAL, "M365_DESK_CLIENT_SECRET": "very-secret-value", "M365_DESK_MAILBOX": ""})
     assert "very-secret-value" not in str(refused.value)
+
+
+def _tools_list(client: TestClient, headers: dict[str, str]) -> int:
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    return client.post("/mcp", headers={**MCP_HEADERS, **headers}, json=body).status_code
+
+
+@pytest.mark.parametrize("variable", ["TRANIBOR_SERVER_TOKEN", "CHOREGOS_SERVER_TOKEN"])
+def test_the_token_comes_from_the_current_core_s_variable_or_an_older_core_s(variable: str) -> None:
+    """The core gives the pod `TRANIBOR_SERVER_TOKEN` since its rename (core ADR 0176); an older core,
+    `CHOREGOS_SERVER_TOKEN`. Reading only the older name, the server refused to start on core 0.29.0
+    (graalsystems/tranibor-agents#35, as servicenow 0.2.4 did on the Diametral dev cluster)."""
+    settings = Settings.from_env({"M365_DESK_FAKE": "1", variable: TOKEN})
+    with TestClient(build_app(settings), base_url=BASE) as client:
+        assert _tools_list(client, BEARER) == 200
+        assert _tools_list(client, {"Authorization": f"Bearer {TOKEN}x"}) == 401
+
+
+def test_the_current_core_s_variable_wins_over_an_older_core_s() -> None:
+    env = {"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_TOKEN": TOKEN, "CHOREGOS_SERVER_TOKEN": "stale"}
+    with TestClient(build_app(Settings.from_env(env)), base_url=BASE) as client:
+        assert _tools_list(client, BEARER) == 200
+        assert _tools_list(client, {"Authorization": "Bearer stale"}) == 401

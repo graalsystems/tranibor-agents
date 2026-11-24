@@ -152,7 +152,7 @@ thread.
 ## The server
 
 `server/` is a Python 3.12 package (`choregos_m365_desk`): MCP over streamable HTTP (stateless, JSON
-responses) at `/mcp` behind the platform's bearer token (`CHOREGOS_SERVER_TOKEN`), `/healthz` open.
+responses) at `/mcp` behind the platform's bearer token (`TRANIBOR_SERVER_TOKEN`), `/healthz` open.
 `M365_DESK_FAKE=1` runs it on a seeded in-memory tenant (`fake.py`): Entra, Graph (the shared mailbox
 with three messages — plain, HTML, already taken — and a Teams thread), the Bot Framework's keys (a test
 issuer with its own RSA key) and the Bot Connector, which records replies. The platform runs the fake with

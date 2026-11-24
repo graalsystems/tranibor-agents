@@ -3,3 +3,6 @@
 
 # An invented Odoo API key, the fake backend's test fixture (procurement PA-06): it opens nothing.
 32cce89b87060ce1470d2fe2fd71aa3c12508200:plugins/procurement/server/tests/odoo_script.py:generic-api-key:24
+
+# The same invented Odoo key, as the commit that squashed the PA-06 work into main carries it (2ab4116, 2026-11-21).
+2ab4116c53df382aa085e12bd4c7595e54616b75:plugins/procurement/server/tests/odoo_script.py:generic-api-key:24

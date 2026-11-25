@@ -29,7 +29,7 @@ def descriptor() -> dict[str, Any]:
 def test_the_descriptor_implements_the_profile_and_the_plugin_requires_it() -> None:
     assert descriptor()["implements"] == ["lan/lan@1"]
     plugin = yaml.safe_load((ROOT / "plugin.yaml").read_text())
-    assert plugin["requires"]["plugins"] == ["lan"]
+    assert plugin["requires"]["plugins"] == [{"name": "lan", "version": ">=0.1.0,<1.0.0"}]
 
 
 def test_the_rest_of_the_descriptor() -> None:

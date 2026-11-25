@@ -19,7 +19,7 @@ metadata:
   # them is not known yet, so this floor is a placeholder to be set to that release. The `lan` plugin says the same.
   core: ">=0.30.0,<1.0.0"
 requires:
-  plugins: [lan]
+  plugins: [{name: lan, version: ">=0.1.0,<1.0.0"}]
   connectors: {}
 contents:
   procedures: ["procedures/*.md"]

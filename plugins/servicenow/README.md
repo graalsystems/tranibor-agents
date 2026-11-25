@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.17, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.18, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.17.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.18.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -308,7 +308,7 @@ instance's `sys_outbound_http_log`, and the work item opened by the delivery abo
 incident was filed (`initiated_by: tracker:plugin:servicenow/servicenow`, a received event
 `created_work_item`), not by the poll (`tracker:sync`). The first delivery was dropped by the core as
 unrouted, because an archived project still used the same tracker: graalsystems/tranibor#2221, fixed by
-graalsystems/tranibor#2222. The rule stays in place for the nightly, whose incident it delivers on insert.
+graalsystems/tranibor#2238. The rule stays in place for the nightly, whose incident it delivers on insert.
 
 Reinstalling the plugin on that deployment needs a second administrator's approval in a browser session
 (`decision_requires_session`: an API token cannot give it). For the nightly above, the owner had the pending

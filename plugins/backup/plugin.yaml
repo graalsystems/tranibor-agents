@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `backup` plugin (ADR 0224): the backup profile (what any backup system's server must serve), the
+# provider-neutral agent `backup-verifier`, its skill, the `backup-nightly` template and the evals. It brings no
+# server: a provider plugin (`backup-velero`, ...) brings one that `implements: [backup/backup@1]`.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: backup
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Prove that backups exist and restore, whatever the backup system: an agent checks every schedule has a
+    recent successful backup, flags failing storage locations and gaps, and proposes a restore test into an
+    isolated target as proof, which a person approves. The agent names no product: it works with whichever
+    backup server plugins the organisation installed.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `contents.profiles` and `mcp_servers[].profile` arrive with the core stories S86-01/S86-02. The first core
+  # release that carries them is not known yet: this floor is a placeholder to set to that release.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  profiles: [profiles/backup.yaml]
+  agents: [agents/backup-verifier.yaml]
+  skills: [skills/restore-testing]
+  templates: [templates/backup-nightly]
+  evals: [evals/backup-verifier.yaml]

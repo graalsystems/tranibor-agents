@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: Apache-2.0
+# Certificate review: queue -> review (agent) -> read (platform team) -> done.
+#
+# - The watcher only reads. It has no write tool, so no run of this workflow can change a cluster, a DNS
+#   zone or a certificate; its proposed fixes are text or YAML inside the report.
+# - A person reads the report and applies, or declines, each proposal by hand, outside the platform.
+# - A failed review goes back to the queue untouched, twice, then to a person.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: cert-review
+  version: 1
+  description: A periodic certificate review written by an agent and read by the platform team; nothing is written anywhere.
+initial: queue
+actors:
+  watcher: { type: agent, role: review, agent: cert-watcher, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  platform_team: { type: human, group: platform-team, sla_hours: 72 }
+states:
+  queue: { display: Waiting for the review, kind: wait }
+  awaiting_read: { display: Report to read, kind: wait }
+  done: { display: Reviewed, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the platform team, terminal: true }
+transitions:
+  - id: t-review
+    from: queue
+    to: awaiting_read
+    by: watcher
+    outputs: [cert_review_markdown]
+    output_types: { cert_review_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: queue, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-read
+    from: awaiting_read
+    to: done
+    by: platform_team
+    task:
+      title: Read the certificate review
+      instructions: >-
+        Read the report. For each proposed fix, decide whether to apply it, and do so yourself where the
+        change belongs (the cluster's repository, the DNS zone, the issuer's configuration). Nothing in this
+        report was applied for you. Mark the review read when you are done.
+      form:
+        type: object
+        required: [outcome]
+        properties:
+          outcome:
+            type: string
+            title: Outcome
+            enum: [nothing_to_do, fixes_planned, fixes_applied]
+          note: { type: string, title: Note, maxLength: 2000 }
+      attest: I read the review and took the decisions it needs
+    on_reject: queue
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: platform_team
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

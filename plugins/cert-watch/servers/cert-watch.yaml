@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: Apache-2.0
+# The cert-watch MCP server, as the platform runs and governs it (ADR 0094). READ-ONLY: it declares no write
+# operation, and its Kubernetes token needs get/list/watch on cert-manager resources only (procedures/).
+# Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: cert-watch
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/cert-watch-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [kube_api_url, kube_token]
+  properties:
+    kube_api_url:
+      type: string
+      format: uri
+      pattern: "^https://"
+      description: The Kubernetes API server URL, e.g. https://k8s.example.com:6443
+      x-env: CERT_WATCH_KUBE_API_URL
+    kube_ca_cert:
+      type: string
+      description: PEM text of the CA that signed the API server's certificate. Leave empty when it chains to the system roots.
+      x-env: CERT_WATCH_KUBE_CA_CERT
+    kube_token:
+      type: string
+      description: Bearer token of the read-only service account (see the procedure). Expires with its duration; renew it before.
+      x-env: CERT_WATCH_KUBE_TOKEN
+    namespaces:
+      type: array
+      items: {type: string}
+      description: Optional allow-list of namespaces to read (joined with commas). Empty means every namespace the token may list.
+      x-env: CERT_WATCH_NAMESPACES
+    domains:
+      type: array
+      items: {type: string}
+      description: Domains whose Certificate Transparency entries are searched, subdomains included, e.g. example.com (joined with commas).
+      x-env: CERT_WATCH_DOMAINS
+    probe_hosts:
+      type: array
+      items: {type: string}
+      description: Hosts to probe over TLS, as host or host:port (443 by default), e.g. www.example.com, mail.example.com:993 (joined with commas).
+      x-env: CERT_WATCH_PROBE_HOSTS
+    ct_url:
+      type: string
+      format: uri
+      pattern: "^https://"
+      default: https://crt.sh
+      description: The Certificate Transparency search endpoint (crt.sh JSON output).
+      x-env: CERT_WATCH_CT_URL
+secret_fields: [kube_token]
+
+# The hosts the server may reach: the API server and the CT search. The probed hosts (`probe_hosts`, a list of
+# host:port) cannot be expressed here: `from_fields` takes one URL per field, so the server enforces that list
+# itself, and the cluster's own NetworkPolicy must admit the probe (README, "Network").
+egress:
+  from_fields: [kube_api_url, ct_url]
+
+# Everything this server does is a read; none needs approval and none has an undo.
+operations:
+  - name: list_certificates
+    access: read
+    description: cert-manager Certificates with status, notAfter, renewalTime and the Ready condition, soonest expiry first.
+  - name: get_certificate
+    access: read
+    description: One Certificate with its issuer, CertificateRequests, ACME Orders and Challenges.
+  - name: list_failing_challenges
+    access: read
+    description: ACME Challenges that are not valid, with type, reason, solver and the Certificate they belong to.
+  - name: ct_search
+    access: read
+    description: Certificate Transparency entries for a configured domain, marked declared or not by a Certificate.
+  - name: probe_tls
+    access: read
+    description: A live TLS probe of one configured host - issuer, SANs, notAfter, chain completeness, trust.
+  - name: expiry_report
+    access: read
+    description: Expiring, not-Ready and failing certificates, failing challenges and every probe, in one call.
+
+# How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
+# switches it to its seeded in-memory instance (server/src/tranibor_cert_watch/config.py), which no
+# configuration field reaches, and the one scene that instance serves. The platform adds its own token
+# (TRANIBOR_SERVER_TOKEN) and nothing of the configuration; TRANIBOR_SERVER_INSECURE_DEV is not needed.
+fake:
+  env: {CERT_WATCH_FAKE: "1"}
+  scenes: [default]

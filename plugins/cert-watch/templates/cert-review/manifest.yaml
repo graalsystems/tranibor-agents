@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: cert-review
+  version: 0.1.0
+  display: cert-watch · certificate review
+  description: >-
+    A periodic review of TLS certificate hygiene. A schedule opens one work item per window; the certificate
+    watcher reads cert-manager, Certificate Transparency and live probes and writes an expiry and failure
+    report with proposed fixes as text or YAML; a person reads it and closes the item. Nothing is ever
+    written to a cluster, a DNS zone or a certificate by the platform: the plugin has no write tool.
+requires:
+  connectors:
+    # Work items are opened by a schedule, which the internal tracker provides.
+    tracker: internal
+  # The organisation connector the plugin's install creates for its server, by name, and its capability.
+  org_connectors:
+    cert-watch: mcp
+defaults:
+  workflows: [./workflows/cert-review.yaml]
+  default_workflow: cert-review
+  policy: preset:solo
+  # The agent `cert-watcher` and the skill `cert-manager-troubleshooting` come with the plugin itself, so the
+  # template does not list them. The schedule is the project's configuration, not the template's: its
+  # `defaults` takes no cron (see README.md for the `schedules:` block to add).
+inputs: []
+steps: []

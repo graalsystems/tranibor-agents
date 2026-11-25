@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# The cert-watch plugin: a read-only agent that reviews TLS certificate hygiene (cert-manager, Certificate
+# Transparency, live probes), the MCP server it reads through, the template a schedule can start, and the
+# procedure an administrator follows on the cluster.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: cert-watch
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Review TLS certificate hygiene without write access: an agent reads cert-manager resources, Certificate
+    Transparency entries and live TLS probes, reports what expires or fails to renew, explains why an ACME
+    challenge fails, flags certificates nobody declared, and proposes fixes as text or YAML for a person.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # The floor is the core the repository's CI plays the plugin against (0.29.2); nothing here needs a feature
+  # newer than the ServiceNow plugin's, but no older core was tried.
+  core: ">=0.29.2,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/cert-watcher.yaml]
+  skills: [skills/cert-manager-troubleshooting]
+  templates: [templates/cert-review]
+  evals: [evals/cert-watcher.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/cert-watch.yaml]

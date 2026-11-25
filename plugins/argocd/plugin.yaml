@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Argo CD plugin: an agent that explains why an Application is OutOfSync or Degraded and proposes the
+# fix, the MCP server it reads and acts through (Argo CD's REST API, a dedicated local account), the
+# template that wires them into a project, and the procedure an administrator follows on Argo CD.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: argocd
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    GitOps drift and sync supervision through the Argo CD API: an agent reads an Application, tells a drift
+    from a pending commit, spots a lingering selective sync, ignored-differences noise and failed hooks,
+    and proposes the fix, a git change in text or a governed sync that the platform owner approves.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # The floor is the core this plugin was validated and tested against (0.29.2, the CI's); a lower one was
+  # not tried.
+  core: ">=0.29.2,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/gitops-steward.yaml]
+  skills: [skills/argocd-troubleshooting]
+  templates: [templates/gitops-drift]
+  evals: [evals/gitops-steward.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/argocd.yaml]

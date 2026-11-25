@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: gitops-drift
+  version: 0.1.0
+  display: Argo CD · drift and sync under approval
+  description: >-
+    An alert or a request about an Argo CD Application becomes a work item. The GitOps steward reads the
+    Application and explains why it is OutOfSync or Degraded; the platform owner reviews the diagnosis and
+    decides; a sync, if decided, is applied as one governed action; the steward then verifies the result.
+    Nothing reaches Argo CD before a person approves it.
+requires:
+  # The project's work items live in the platform: an alert, a chat message or a person opens one
+  # (ADR 0113 of the core), naming the Application in its title or in the `application` field.
+  connectors:
+    tracker: internal
+  # The organisation connector the plugin's install creates for its server, by name, and its capability.
+  org_connectors:
+    argocd: mcp
+defaults:
+  workflows: [./workflows/gitops-drift.yaml]
+  default_workflow: gitops-drift
+  policy: preset:solo
+  # The agent `gitops-steward` and the skill `argocd-troubleshooting` come with the plugin itself, so the
+  # template does not list them.
+inputs: []
+steps: []

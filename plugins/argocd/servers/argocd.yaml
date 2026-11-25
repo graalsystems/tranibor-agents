@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Argo CD MCP server, as the platform runs and governs it (ADR 0094).
+# Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: argocd
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/argocd-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [base_url, token, projects]
+  properties:
+    base_url:
+      type: string
+      format: uri
+      pattern: "^https://"
+      description: The Argo CD server URL, e.g. https://argocd.example.com (the API is served under /api/v1).
+      x-env: ARGOCD_BASE_URL
+    token:
+      type: string
+      description: The API token of a dedicated local account (accounts.<name> with the apiKey capability), never admin.
+      x-env: ARGOCD_TOKEN
+    projects:
+      type: array
+      minItems: 1
+      items: {type: string, minLength: 1}
+      description: The AppProjects this server may read and act on (joined with commas). An Application of any other project is refused.
+      x-env: ARGOCD_PROJECTS
+    ca_cert:
+      type: string
+      description: PEM text of the CA that signed Argo CD's certificate, when it is a private one.
+      x-env: ARGOCD_CA_CERT
+secret_fields: [token]
+
+# The only host the server may reach: Argo CD.
+egress:
+  from_fields: [base_url]
+
+# The governance floor. `access: read` is allowed by default; a write goes through approval unless an
+# administrator decides otherwise; `human_approval: true` is never lowered.
+# `refresh_application` is a write without `human_approval` on purpose: it only asks Argo CD to re-read git
+# and changes nothing in the cluster. There is no operation that deletes an Application, edits a spec or
+# changes a project or RBAC: the server has no code for it.
+# `compensation` is the operation that undoes the write, its arguments rendered from the write's own result.
+# `platform_arguments: [action_key]` is an idempotency key the platform fills, never the agent.
+operations:
+  - {name: list_applications, access: read}
+  - {name: get_application, access: read}
+  - {name: get_resource_tree, access: read}
+  - {name: get_managed_resources, access: read}
+  - {name: list_events, access: read}
+  - {name: get_sync_windows, access: read}
+  - {name: get_history, access: read}
+  - {name: get_revision_metadata, access: read}
+  - name: sync_dry_run
+    access: read
+    description: What a sync would do, computed from the diff. Writes nothing.
+
+  - name: refresh_application
+    access: write
+    description: Asks Argo CD to re-read git (normal) or to drop its manifest cache (hard). Nothing changes in the cluster.
+  - name: sync_application
+    access: write
+    human_approval: true
+    description: A full sync by default; a resource list only with a written justification. prune is false unless asked. Idempotent through the platform's action_key.
+    platform_arguments: [action_key]
+  - name: terminate_operation
+    access: write
+    human_approval: true
+    description: Terminates the running operation. Resources already applied stay applied.
+  - name: rollback_application
+    access: write
+    human_approval: true
+    description: Rolls back to a deployment of the history. Undone by rolling back to the deployment that was in force.
+    compensation:
+      operation: rollback_application
+      arguments:
+        name: "{{ result.application }}"
+        history_id: "{{ result.previous_id }}"
+        prune: "{{ result.prune | tojson }}"
+
+# How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
+# switches it to its seeded in-memory Argo CD (server/src/tranibor_argocd/config.py), which no
+# configuration field reaches, and the one scene that instance serves.
+fake:
+  env: {ARGOCD_FAKE: "1"}
+  scenes: [default]

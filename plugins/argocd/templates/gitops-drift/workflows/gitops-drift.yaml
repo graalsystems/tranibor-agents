@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: Apache-2.0
+# Drift and sync under approval: alert or request → diagnosis (agent) → review (platform owner) →
+# apply (platform) → verify (agent) → done.
+#
+# - The steward only reads, and proposes. The report says the cause and the fix; a git change is text for
+#   the owner, never something the platform writes.
+# - The platform owner reads the report and decides: sync (the whole Application; prune only if ticked), or
+#   reject to close without any sync (the owner then makes the git change by hand).
+# - Apply is ONE governed action, `sync_application`, which waits for the owners' approval too. It is a FULL
+#   sync: the template has no way to name resources, and a selective sync is what leaves a stale
+#   operation state behind. The `action_key` platform argument makes a retried sync idempotent.
+# - Verify: the steward refreshes and re-reads the Application and says whether it is Synced and Healthy.
+# - A failed diagnosis goes back to the start untouched: the steward writes nothing.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: gitops-drift
+  version: 1
+  description: An Argo CD Application diagnosed by an agent, a sync approved by the platform owner, then verified.
+  inputs:
+    type: object
+    required: [application]
+    properties:
+      application: { type: string, title: Argo CD Application, minLength: 1, maxLength: 253, pattern: "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" }
+      prune: { type: boolean, title: Prune resources that git no longer has, default: false }
+      decision_note: { type: string, title: Decision note, maxLength: 2000 }
+initial: alert
+actors:
+  steward: { type: agent, role: diagnosis, agent: gitops-steward, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  platform_owner: { type: human, group: platform-owners, sla_hours: 8 }
+  platform: { type: system }
+states:
+  alert: { display: Alert or request, kind: wait }
+  awaiting_review: { display: Diagnosis to review, kind: wait }
+  approved: { display: Sync decided }
+  applied: { display: Sync applied, kind: wait }
+  done: { display: Verified, terminal: true }
+  closed: { display: Closed without a sync, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the platform owner, terminal: true }
+transitions:
+  - id: t-diagnose
+    from: alert
+    to: awaiting_review
+    by: steward
+    outputs: [gitops_report_markdown]
+    output_types: { gitops_report_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: alert, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-review
+    from: awaiting_review
+    to: approved
+    by: platform_owner
+    task:
+      title: Decide on the sync
+      instructions: >-
+        Read the diagnosis. If a sync is the right fix, submit: it is applied as a governed action that
+        still waits for approval. Tick prune only when the report lists resources git no longer has and
+        you want them deleted. If the fix is a git change, or nothing, reject: the item closes without
+        any sync.
+      form:
+        type: object
+        required: [prune, decision_note]
+        properties:
+          prune: { type: boolean, title: Prune resources that git no longer has, default: false }
+          decision_note: { type: string, title: Decision note, minLength: 1, maxLength: 2000 }
+      attest: I read the diagnosis and the sync I decide on
+    on_reject: closed
+
+  - id: t-apply
+    from: approved
+    to: applied
+    by: platform
+    action:
+      kind: argocd.sync
+      title: "Sync {{ fields.application }} (full, prune {{ 'on' if fields.prune else 'off' }})"
+      justification: "{{ fields.decision_note }}"
+      params:
+        application: "{{ fields.application }}"
+        prune: "{{ 'true' if fields.prune else 'false' }}"
+      effects:
+        - effect: connector.call
+          with:
+            connector: argocd
+            operation: sync_application
+            arguments:
+              name: "{{ params.application }}"
+              prune: "{{ params.prune }}"
+      approval:
+        approvers: [{ role: approver, group: platform-owners, min: 1 }]
+        step_up_minutes: 10
+    # A sync that failed is not proposed again on its own: a person reads the cause first.
+    on_fail: { to: approved, max_attempts: 1, escalate_to: needs_human }
+
+  - id: t-verify
+    from: applied
+    to: done
+    by: steward
+    outputs: [gitops_report_markdown]
+    output_types: { gitops_report_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: applied, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: platform_owner
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

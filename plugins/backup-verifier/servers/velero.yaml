@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Velero MCP server, as the platform runs and governs it (ADR 0094). Source: ../server.
+# It reads the velero.io/v1 custom resources through the Kubernetes API as ONE service account, optionally
+# lists the backup bucket (read-only, SigV4), and writes in exactly one place: namespaces whose name starts
+# with `restore_namespace_prefix`. A tool not listed in `operations` is refused by the platform.
+name: velero
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/backup-verifier-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [kube_api_url, kube_token, restore_namespace_prefix]
+  properties:
+    kube_api_url:
+      type: string
+      format: uri
+      pattern: "^https://"
+      description: The Kubernetes API server URL, e.g. https://kubernetes.example.com:6443
+      x-env: VELERO_KUBE_API_URL
+    kube_ca_cert:
+      type: string
+      description: The cluster's CA certificate (PEM). Empty means the system trust store.
+      x-env: VELERO_KUBE_CA_CERT
+    kube_token:
+      type: string
+      description: The service account's bearer token (see the procedure for its RBAC).
+      x-env: VELERO_KUBE_TOKEN
+    velero_namespace:
+      type: string
+      default: velero
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      description: The namespace Velero runs in; its Backup, Schedule, Restore and location resources are read there.
+      x-env: VELERO_NAMESPACE
+    restore_namespace_prefix:
+      type: string
+      pattern: "^[a-z0-9][a-z0-9-]{3,28}-$"
+      description: >-
+        Test restores go ONLY into namespaces starting with this prefix, e.g. restore-test-. The server refuses
+        every other target and refuses a prefix that could cover a system namespace.
+      x-env: VELERO_RESTORE_NAMESPACE_PREFIX
+    s3_endpoint:
+      type: string
+      format: uri
+      pattern: "^https://"
+      description: Optional. The S3-compatible endpoint of the backup bucket, e.g. https://s3.example.com (path-style).
+      x-env: VELERO_S3_ENDPOINT
+    s3_bucket:
+      type: string
+      description: Optional. The backup bucket's name.
+      x-env: VELERO_S3_BUCKET
+    s3_region:
+      type: string
+      default: us-east-1
+      description: Optional. The bucket's region (SigV4 scope).
+      x-env: VELERO_S3_REGION
+    s3_prefix:
+      type: string
+      description: Optional. The key prefix Velero writes under (the storage location's `prefix`).
+      x-env: VELERO_S3_PREFIX
+    s3_access_key:
+      type: string
+      description: Optional. A read-only access key (s3:ListBucket on the bucket).
+      x-env: VELERO_S3_ACCESS_KEY
+    s3_secret_key:
+      type: string
+      description: Optional. The secret of that access key.
+      x-env: VELERO_S3_SECRET_KEY
+secret_fields: [kube_token, s3_access_key, s3_secret_key]
+
+# The only hosts the server may reach: the API server, and the bucket when one is configured.
+egress:
+  from_fields: [kube_api_url, s3_endpoint]
+
+# The governance floor. `access: read` is allowed by default; a write goes through approval unless an
+# administrator decides otherwise; `human_approval: true` is never lowered. `compensation` is the operation
+# that undoes the write, its arguments rendered from the write's own result.
+operations:
+  - {name: list_schedules, access: read}
+  - {name: list_backups, access: read}
+  - {name: get_backup, access: read}
+  - {name: storage_locations, access: read}
+  - {name: list_restores, access: read}
+  - {name: get_restore, access: read}
+  - {name: backup_freshness, access: read}
+  - {name: bucket_listing, access: read}
+
+  # Creates a namespace and a Restore inside the prefix: it consumes cluster capacity and can run a restore
+  # hook, but nobody outside the platform team feels it, so `human_approval` is left unset: governed by
+  # default, and an administrator who trusts the nightly run may lower it to automatic.
+  - name: create_test_restore
+    access: write
+    description: Restores one namespace of a backup into a namespace inside the configured prefix; idempotent through the platform's action_key. Undone by deleting that namespace.
+    platform_arguments: [action_key]
+    compensation:
+      operation: delete_test_restore_namespace
+      arguments:
+        namespace: "{{ result.target_namespace }}"
+  # Only a namespace this server created inside the prefix; there is nothing to undo about a deletion of
+  # throw-away data, so no compensation, and no approval to ask for.
+  - name: delete_test_restore_namespace
+    access: write
+    human_approval: false
+    description: Deletes a restore-test namespace; refused outside the prefix or when this server did not create it.
+
+# How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
+# switches it to its seeded in-memory cluster (server/src/tranibor_backup_verifier/fake.py), which no
+# configuration field reaches. The platform adds its own token (TRANIBOR_SERVER_TOKEN) and nothing of the
+# configuration.
+fake:
+  env: {VELERO_FAKE: "1"}
+  scenes: [default]

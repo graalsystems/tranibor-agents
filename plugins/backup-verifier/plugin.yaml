@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# The backup-verifier plugin (ADR 0093): an agent that proves Velero backups restore, the MCP server it
+# reads and restores through, the skill that teaches the method, the template that wires a nightly run
+# into a project, and the procedure an administrator follows on the cluster.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: backup-verifier
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Prove that Kubernetes backups restore: an agent checks each Velero schedule's freshness, errors and
+    storage location, restores one namespace into a throw-away prefixed namespace, compares what came
+    back, and reports a Green or Red verdict per schedule with the evidence and a proposed fix.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # 0.25.1: the first core that knows the five components an agent declares (ADR 0127: `model`,
+  # `tools.catalogue|extensions|web`, `memories`). The template needs nothing newer: it ships no
+  # `defaults.start_rules` (a nightly run is a project `schedules` entry, see its README).
+  core: ">=0.25.1,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/backup-verifier.yaml]
+  skills: [skills/restore-testing]
+  templates: [templates/backup-nightly]
+  evals: [evals/backup-verifier.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/velero.yaml]

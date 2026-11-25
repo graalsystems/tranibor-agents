@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: backup-nightly
+  version: 0.1.0
+  display: Backups - nightly restore verification
+  description: >-
+    Every night a work item verifies the cluster's Velero backups: the backup verifier checks freshness,
+    errors and storage locations, restores one namespace into a throw-away prefixed namespace and reports
+    Green or Red per schedule. A Green night closes by itself; a Red one goes to the platform owner, who
+    reads the evidence and the proposed fix and settles it.
+requires:
+  connectors: {}
+  # The organisation connector the plugin's install creates for its server, by name, and its capability.
+  org_connectors:
+    velero: mcp
+defaults:
+  workflows: [./workflows/backup-nightly.yaml]
+  default_workflow: backup-nightly
+  policy: preset:solo
+  # The agent `backup-verifier` and the skill `restore-testing` come with the plugin itself (installed in
+  # the organisation when the plugin is), so the template does not list them.
+  #
+  # NOT here: the cron. `defaults.start_rules` matches a tracker item (labels, type, state) and has no time;
+  # a nightly run is a project `schedules` entry, which a template cannot ship. See README.md.
+inputs: []
+steps: []

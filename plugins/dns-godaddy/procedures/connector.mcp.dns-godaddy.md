@@ -27,7 +27,7 @@ fields:
 - Written from GoDaddy's public documentation (fetched 2026-11-25), **not run against a real account**: see
   "What is not confirmed".
 
-## Account restrictions on API access
+### Account restrictions on API access
 
 What the documentation says, and no more:
 

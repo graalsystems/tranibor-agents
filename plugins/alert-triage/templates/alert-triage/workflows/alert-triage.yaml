@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: Apache-2.0
+# Alert triage under approval: alert → triage (agent) → review (on call) → apply (platform) → done.
+#
+# - The triager only reads, and proposes. `grafana__create_silence`, if it calls it, is a governed action
+#   waiting in Approvals; nothing reaches Grafana from the run itself.
+# - The agent's `decision` output routes the review: `silence` goes to the silence form, anything else
+#   (escalate, fix_rule, none, or no answer) to the acknowledgement form. A decision the agent did not
+#   write never takes the silence branch.
+# - The silence is created once, from what the person on call settled in the form (exact matchers, minutes,
+#   reason), as ONE governed action that another person approves, re-authenticated; the server bounds the
+#   duration and refuses a matcher that selects no firing alert. Its effect is compensated by expiring the
+#   silence if a later effect fails (there is none today; the compensation is declared for the platform's
+#   undo).
+# - A rejected silence, or a failed triage, writes nothing.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: alert-triage
+  version: 1
+  description: A Grafana alert triaged by an agent, reviewed by the person on call, and silenced only when approved.
+  # The work item's fields: the first four come from the trigger's mapping, the rest from the review forms.
+  inputs:
+    type: object
+    properties:
+      alertname: { type: string, title: Alert name, maxLength: 200 }
+      severity: { type: string, title: Severity, maxLength: 40 }
+      rule_uid: { type: string, title: Alert rule uid, maxLength: 80 }
+      starts_at: { type: string, title: Started at, maxLength: 40 }
+      silence_matchers: { type: string, title: Silence matchers (JSON object of exact label values), maxLength: 1000 }
+      silence_minutes: { type: string, title: Silence duration in minutes, pattern: "^[0-9]{1,4}$" }
+      silence_comment: { type: string, title: Why it is silenced, maxLength: 300 }
+      outcome_note: { type: string, title: Outcome, maxLength: 2000 }
+initial: alert
+actors:
+  triager: { type: agent, role: triage, agent: on-call-triager, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  on_call: { type: human, group: on-call, sla_hours: 1 }
+  platform: { type: system }
+states:
+  alert: { display: Alert received, kind: wait }
+  awaiting_review: { display: Triage to review, kind: wait }
+  silence_approved: { display: Silence settled, kind: wait }
+  done: { display: Handled, terminal: true }
+  declined: { display: Silence declined, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the person on call, terminal: true }
+transitions:
+  - id: t-triage
+    from: alert
+    to: awaiting_review
+    by: triager
+    outputs: [alert_triage_markdown, decision]
+    output_types: { alert_triage_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: alert, max_attempts: 2, escalate_to: needs_human }
+
+  # The agent proposes a silence: the person on call settles the exact silence it would create.
+  - id: t-review-silence
+    from: awaiting_review
+    to: silence_approved
+    by: on_call
+    when: { decision: silence }
+    task:
+      title: Settle the silence
+      instructions: >-
+        Read the triage report. If you agree the alert is noise or known flapping, copy the matchers from
+        the firing alert (always alertname, plus the labels that identify the service and instance; exact
+        values, no regular expression), keep the duration as short as the cause allows, and say why. A
+        second person then approves the silence in Approvals before Grafana is touched. Reject to send the
+        alert back for another triage, with nothing written.
+      form:
+        type: object
+        required: [silence_matchers, silence_minutes, silence_comment]
+        properties:
+          silence_matchers:
+            type: string
+            title: 'Matchers, as JSON: {"alertname": "…", "service": "…"}'
+            pattern: '^\{.*"alertname".*\}$'
+            maxLength: 1000
+          silence_minutes: { type: string, title: Duration in minutes (the server caps it), pattern: "^[0-9]{1,4}$" }
+          silence_comment: { type: string, title: Why, minLength: 1, maxLength: 300 }
+      attest: I read the triage and I settle on this silence
+    on_reject: alert
+
+  # Every other decision is text: the person on call acknowledges what to do and who does it.
+  - id: t-review-text
+    from: awaiting_review
+    to: done
+    by: on_call
+    task:
+      title: Settle the outcome
+      instructions: >-
+        Read the triage report. Escalate with the page text it proposes, fix the rule it names, or note that
+        the alert resolved. Write what was decided and who takes it. Nothing is written to Grafana by this
+        step. Reject to send the alert back for another triage.
+      form:
+        type: object
+        required: [outcome_note]
+        properties:
+          outcome_note: { type: string, title: What was decided, minLength: 1, maxLength: 2000 }
+      attest: I read the triage and recorded the outcome
+    on_reject: alert
+
+  - id: t-silence
+    from: silence_approved
+    to: done
+    by: platform
+    action:
+      kind: grafana.silence
+      title: "Silence {{ fields.alertname }} for {{ fields.silence_minutes }} min"
+      justification: "{{ fields.silence_comment }}"
+      params:
+        matchers: "{{ fields.silence_matchers }}"
+        minutes: "{{ fields.silence_minutes }}"
+        comment: "{{ fields.silence_comment }}"
+      effects:
+        - effect: connector.call
+          with:
+            connector: grafana
+            operation: create_silence
+            arguments:
+              matchers: "{{ params.matchers }}"
+              duration_minutes: "{{ params.minutes }}"
+              comment: "{{ params.comment }}"
+          compensate:
+            effect: connector.call
+            with:
+              connector: grafana
+              operation: expire_silence
+              arguments: { silence_id: "{{ result.silence_id }}" }
+      approval:
+        approvers: [{ role: approver, min: 1 }]
+        separation_of_duties: true
+        step_up_minutes: 5
+    on_reject: declined
+    # A failure after approval (a matcher that selects no firing alert, a duration over the cap) is not
+    # proposed again on its own: a person reads the cause first.
+    on_fail: { to: silence_approved, max_attempts: 1, escalate_to: needs_human }
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: on_call
+    timeout_hours: 24
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

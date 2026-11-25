@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: alert-triage
+  version: 0.1.0
+  display: Grafana · on-call alert triage under approval
+  description: >-
+    A Grafana alert that notifies the platform's webhook becomes a work item. The on-call triager reads the
+    rule, the metric, a slice of logs and the deploy markers, and decides real incident, noise or known
+    flapping; the person on call reviews it and settles the outcome; a silence, when one is warranted, is
+    created in Grafana as one governed action that a second person approves. Nothing is written to Grafana
+    before a person approves it.
+requires:
+  connectors:
+    # Work items are opened by an HTTP trigger (ADR 0113) that Grafana's webhook contact point calls: the
+    # project's own tracker, no external one. A template cannot ship the trigger (the manifest has no
+    # place for it), so the procedure gives its definition.
+    tracker: internal
+  # The organisation connector the plugin's install creates for its server `grafana`, by name, and its
+  # capability (as the ServiceNow template names its own).
+  org_connectors:
+    grafana: mcp
+defaults:
+  workflows: [./workflows/alert-triage.yaml]
+  default_workflow: alert-triage
+  policy: preset:solo
+  # The agent `on-call-triager` and the skill `alert-triage` come with the plugin itself.
+inputs: []
+steps: []

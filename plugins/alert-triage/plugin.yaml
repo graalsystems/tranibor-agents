@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# The alert-triage plugin: an agent that triages the alerts of a Grafana stack (Grafana alerting,
+# Prometheus or Mimir, Loki) for the person on call, the MCP server it reads and acts through, the template
+# that wires them into a project, and the procedure an administrator follows on Grafana.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: alert-triage
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Triage Grafana alerts for the person on call: an agent reads the rule, the metric around the start, a
+    bounded slice of logs and the deploy markers, decides real incident, noise or known flapping, and
+    proposes to escalate, to silence for a short time under approval, or to fix the rule.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # The agent declares its five components (ADR 0127, core 0.25.1) and the workflow routes on the agent's
+  # answer (`when`, ADR 0106). The oldest core this plugin is tested against is the one CI runs, 0.29.2: no
+  # older floor was checked, so none is claimed.
+  core: ">=0.29.2,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/on-call-triager.yaml]
+  skills: [skills/alert-triage]
+  templates: [templates/alert-triage]
+  evals: [evals/on-call-triager.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/grafana.yaml]

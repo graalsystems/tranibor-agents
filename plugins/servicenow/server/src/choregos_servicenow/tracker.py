@@ -23,7 +23,7 @@ from .client import MAX_ROWS, ServiceNowClient
 from .errors import Refused
 from .query import Filter, Op, Query, eq
 from .tables import TRACKER_TABLES, UPDATABLE_FIELDS, is_sys_id, table_of_number
-from .tools import ServiceNowTools, marker_of, text_key, unkeyed
+from .tools import ServiceNowTools, marker_of, text_key, unkept
 from .webhook import CLOSED_STATES, parse, verify
 
 log = structlog.get_logger("choregos_servicenow.tracker")
@@ -138,11 +138,10 @@ class Tracker:
         existing = await self.client.find_one("incident", Query("incident").where(eq("correlation_id", correlation)))
         if existing is not None:
             return {"key": existing["fields"]["number"], "sys_id": existing["sys_id"], "created": False}
-        record = await self.client.create(
-            "incident",
-            {"short_description": title, "description": body, "correlation_id": correlation, **extra},
-        )
-        return {"key": record["fields"]["number"], "sys_id": record["sys_id"], "created": True, **unkeyed(record)}
+        values = {"short_description": title, "description": body, "correlation_id": correlation, **extra}
+        record = await self.client.create("incident", values)
+        number, sys_id = record["fields"]["number"], record["sys_id"]
+        return {"key": number, "sys_id": sys_id, "created": True, **unkept(record, values)}
 
     async def set_state(
         self,
@@ -162,7 +161,21 @@ class Tracker:
             raise Refused(f"{status!r} is not a state of {table}; states: {', '.join(choices.values())}")
         if value in CLOSED_STATES[table]:
             raise Refused(f"{status!r} closes the item: use tracker_close")
-        if row["fields"].get("state") == value:
+        current = str(row["fields"].get("state"))
+        if current in CLOSED_STATES[table]:
+            # A closed item stays closed: a state move would reopen it, and on an incident ServiceNow then
+            # clears its resolution and counts a reopening. Reopening is `reopen_incident`'s, a write a
+            # person approves. The platform mirrors its own states here, and an item may have been closed
+            # between its read and this move (graalsystems/tranibor-agents#66): the answer says it, unmoved.
+            log.warning("state_move_on_closed_item", table=table, key=key, state=current, asked=value)
+            return {
+                "key": key,
+                "changed": False,
+                "state": row["display"].get("state", current),
+                "closed": True,
+                "ignored": ignored,
+            }
+        if current == value:
             return {"key": key, "changed": False, "state": choices[value], "ignored": ignored}
         if table == "change_request":
             await self._move_change(row, value, choices[value], {})

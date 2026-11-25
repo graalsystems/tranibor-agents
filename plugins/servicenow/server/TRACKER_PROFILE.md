@@ -103,6 +103,11 @@ Output: `{"key": "INC0020001", "sys_id": "<32 hex>", "created": true}`
 - `fields` is optional; only the keys above are accepted, references by sys_id; `priority` is refused.
 - Idempotent: the incident carries `correlation_id = choregos:<action_key>` (or a hash of title and body);
   a replay answers the existing key with `"created": false`.
+- A field the instance did not keep is said, not hidden: ServiceNow files the record and drops, silently,
+  every field the user cannot create. The answer then holds `"not_kept": ["<field>", …]` and a `warning`
+  naming the create rights to grant (`incident.<field>`), and `"idempotent": false` when `correlation_id` is
+  one of them (a replay would file a second incident). `create_change_request` answers the same way, on its
+  first call and on a replay (graalsystems/tranibor-agents#66).
 
 ## `tracker_set_state`
 
@@ -116,6 +121,12 @@ Output: `{"key": "INC0010003", "changed": true, "state": "On Hold", "ignored": [
   Complete…) is refused: use `tracker_close`.
 - ServiceNow has no labels: `label` and `remove_labels` are accepted and reported in `ignored`.
 - Without `status`, nothing changes. Setting the current state answers `"changed": false`.
+- **A closed item stays closed** (Resolved, Closed, Canceled, Closed Complete…): the move is not written and
+  the answer is `{"key": …, "changed": false, "state": "Resolved", "closed": true, "ignored": []}`. On an
+  incident, a move out of Resolved makes ServiceNow clear its resolution and count a reopening; reopening is
+  `reopen_incident`'s, a write a person approves. The platform mirrors its own states here, and an item can be
+  closed between the platform's read and its move: a deployment's first mirror (New) once landed one second
+  after the incident was resolved, and reopened it (graalsystems/tranibor-agents#66).
 - A **change request** moves through the Change Management API (`PATCH /api/sn_chg_rest/change/{sys_id}`),
   only to a state its change model reaches from the current one (`GET …/nextstates`); any other is refused
   before anything is written, the refusal naming the states it reaches. The Table API's write of a

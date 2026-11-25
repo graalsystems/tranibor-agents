@@ -11,9 +11,12 @@
   needs the role `snc_basic_auth_api_access`); the client id and secret, its OAuth client credentials
   integration. Each set that is present runs every test; at least one is needed.
 - The cleanup user may delete (an administrator of a development instance): the run deletes what it
-  created, and files the request item the tracker tests need. Without it, the run leaves its records
-  resolved or canceled, their titles tagged `[choregos-live <run>]`, and the request item test skips.
-- `TRANIBOR_LIVE_SERVICENOW_GROUP` is the assignment group of the queue (`Service Desk` by default).
+  created (found by its title's tag or its correlation id, `choregos:live-<run>-…`), and files the request
+  item the tracker tests need. Without it, the run leaves its incidents resolved and its change canceled,
+  their titles tagged `[choregos-live <run>]`, and the request item test skips.
+- `TRANIBOR_LIVE_SERVICENOW_GROUP` is the assignment group of the queue (`Service Desk` by default). On an
+  instance that a deployment also watches, name a group it does not: its triage project opens every
+  incident filed in its queue as a work item and writes to it while the suite does (#66).
 
 `TRANIBOR_LIVE_REQUIRED=servicenow` turns a missing variable into a failure, as the core's live suite does.
 """
@@ -35,6 +38,8 @@ from ..conftest import Mcp
 
 RUN = uuid.uuid4().hex[:8]
 TAG = f"[choregos-live {RUN}]"
+#: What the run's creations carry as their idempotency key (`choregos:<action_key>`, keys `live-<run>-…`).
+CORRELATION = f"choregos:live-{RUN}-"
 
 
 def _env(name: str) -> str:
@@ -52,6 +57,10 @@ def _missing(what: str) -> None:
     pytest.skip(f"live ServiceNow test skipped: {what}")
 
 
+#: The assignment group the suite files in and whose queue it reads.
+GROUP = os.environ.get("TRANIBOR_LIVE_SERVICENOW_GROUP") or "Service Desk"
+
+
 def modes() -> list[str]:
     found = []
     if _env("USERNAME") and _env("PASSWORD"):
@@ -67,7 +76,7 @@ def live_env(mode: str, **overrides: str) -> dict[str, str]:
     env = {
         "SERVICENOW_BASE_URL": _env("URL"),
         "SERVICENOW_AUTH": mode,
-        "SERVICENOW_ASSIGNMENT_GROUPS": _env("GROUP") or "Service Desk",
+        "SERVICENOW_ASSIGNMENT_GROUPS": GROUP,
     }
     if mode == "basic":
         env |= {"SERVICENOW_USERNAME": _env("USERNAME"), "SERVICENOW_PASSWORD": _env("PASSWORD")}
@@ -131,9 +140,14 @@ class Admin:
         return rows
 
     def delete_run(self) -> None:
-        """Every record whose title carries this run's tag, and the fixtures filed for it."""
-        for table in ("incident", "change_request", "sc_req_item"):
-            for row in self.rows(table, f"short_descriptionSTARTSWITH{TAG}", "sys_id"):
+        """Every record whose title carries this run's tag or whose correlation id is the run's, and the
+        fixtures filed for it (a field the instance did not keep at creation leaves the other, #66)."""
+        for table, query in (
+            ("incident", f"short_descriptionSTARTSWITH{TAG}^ORcorrelation_idSTARTSWITH{CORRELATION}"),
+            ("change_request", f"short_descriptionSTARTSWITH{TAG}^ORcorrelation_idSTARTSWITH{CORRELATION}"),
+            ("sc_req_item", f"short_descriptionSTARTSWITH{TAG}"),
+        ):
+            for row in self.rows(table, query, "sys_id"):
                 self.created.append((table, row["sys_id"]))
         for table, sys_id in dict.fromkeys(self.created):
             self.http.delete(f"/api/now/table/{table}/{sys_id}")

@@ -9,8 +9,8 @@ role and as one holding `itil`, by basic authentication and by OAuth client cred
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from mcp import Client
 
@@ -19,9 +19,7 @@ from choregos_servicenow.config import Settings
 from choregos_servicenow.query import eq
 
 from ..conftest import Mcp
-from .conftest import RUN, TAG, Admin, LiveMcp, live_env
-
-GROUP = "Service Desk"
+from .conftest import GROUP, RUN, TAG, Admin, LiveMcp, live_env
 
 
 async def group_id(mcp: LiveMcp, name: str = GROUP) -> str:
@@ -116,6 +114,9 @@ async def test_an_incident_through_the_tracker_profile(mcp: LiveMcp, admin: Admi
     closed = await mcp.call("tracker_close", key=key)
     assert closed == {"key": key, "closed": True, "state": "Resolved"}
     assert (await mcp.call("tracker_close", key=key))["closed"] is False
+    # #66: a state mirror that lands after the close leaves the item closed, and says so.
+    late = await mcp.call("tracker_set_state", key=key, status="New")
+    assert (late["changed"], late["closed"], late["state"]) == (False, True, "Resolved")
     assert key not in (await mcp.call("tracker_list_candidates"))["keys"]
 
 
@@ -176,15 +177,32 @@ async def test_reads_the_triager_uses(mcp: LiveMcp) -> None:
         await mcp.call("list_ci_relations", sys_id=ci[0]["sys_id"])
 
 
-async def test_a_change_request_is_filed_once_and_its_state_model_is_said(mcp: LiveMcp) -> None:
+async def test_a_change_request_is_filed_once_and_its_state_model_is_said(mcp: LiveMcp, runtime: Runtime) -> None:
     arguments = {
         "short_description": f"{TAG} change", "description": "Live suite.", "implementation_plan": "Reboot.",
         "backout_plan": "None.", "test_plan": "Ping.", "action_key": key_of(mcp, "change"),
         # The change model's business rule refuses New -> Assess while the assignment group is empty (seen
         # on an Australia PDI, 2026-11-24): a change the agent files names its group, as the procedure does.
-        "assignment_group": await group_id(mcp, os.environ.get("TRANIBOR_LIVE_SERVICENOW_GROUP") or GROUP),
+        "assignment_group": await group_id(mcp),
     }  # fmt: skip
     first = await mcp.call("create_change_request", **arguments)
+    try:
+        await _a_change_moves_on_its_model(mcp, arguments, first)
+    finally:
+        # Nothing closes a change before its approvals: canceled, it leaves the queue whether or not a cleanup
+        # user deletes it after (the Change Management API, as the integration user; #66).
+        sys_id = first["record"]["sys_id"]
+        state = str((await runtime.client.get("change_request", sys_id))["fields"]["state"])
+        if "4" in await runtime.client.change_next_states(sys_id, state):
+            await runtime.client.update_change(sys_id, {"state": "4"})
+    assert first["record"]["fields"]["number"] not in (await mcp.call("tracker_list_candidates"))["keys"]
+
+
+async def _a_change_moves_on_its_model(mcp: LiveMcp, arguments: dict[str, str], first: dict[str, Any]) -> None:
+    # #66: the procedure's role could not write a change's title and description, and the instance dropped
+    # them silently. Filed whole, or the answer names what was not kept.
+    assert first["record"]["fields"]["short_description"] == arguments["short_description"], first.get("warning")
+    assert "not_kept" not in first, first["not_kept"]
     again = await mcp.call("create_change_request", **arguments)
     assert (first["created"], again["created"]) == (True, False)
     assert again["record"]["sys_id"] == first["record"]["sys_id"]

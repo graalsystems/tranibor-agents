@@ -42,7 +42,7 @@ def operations() -> dict[str, dict[str, Any]]:
 def test_the_descriptor_implements_the_profile_and_the_plugin_requires_it() -> None:
     assert descriptor()["implements"] == ["identity/identity@1"]
     plugin = yaml.safe_load((ROOT / "plugin.yaml").read_text())
-    assert plugin["requires"]["plugins"] == ["identity"]
+    assert plugin["requires"]["plugins"] == [{"name": "identity", "version": ">=0.1.0,<1.0.0"}]
 
 
 def test_every_served_tool_is_declared_and_every_declared_tool_served(web: HttpMcp) -> None:

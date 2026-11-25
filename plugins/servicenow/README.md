@@ -4,7 +4,7 @@ Triage ServiceNow incidents with a Tranibor agent, under human approval.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.18, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `servicenow` 0.2.19, core `>=0.29.2,<1.0.0` (the first core whose templates ship their projects' start rules, graalsystems/tranibor#2200) |
 | Agent | [`agents/itsm-triager.yaml`](agents/itsm-triager.yaml) | reads, cites, proposes; every write waits for a person |
 | Skill | [`skills/servicenow-triage`](skills/servicenow-triage/SKILL.md) | impact/urgency matrix, escalation, work note vs customer comment |
 | Template | [`templates/itsm-incident-triage`](templates/itsm-incident-triage/README.md) | queue → triage → review (service desk) → apply → done |
@@ -24,7 +24,7 @@ inherits any of them from its project; its catalogue version is 2 and no instruc
 
 ```sh
 tranibor plugin validate plugins/servicenow
-tranibor plugin pack plugins/servicenow -o servicenow-0.2.18.tar.gz   # same bytes every time
+tranibor plugin pack plugins/servicenow -o servicenow-0.2.19.tar.gz   # same bytes every time
 ```
 
 `validate` reads the whole directory: run it on a clean tree (no `server/.venv` nor caches), as CI does.
@@ -249,6 +249,12 @@ in the fake and under a unit test: a request item's states live on `task`; `sys_
 user (403) and `sys_journal_field` answers it no row; a write the instance will not apply answers 200 with
 the old value; a journal header's date is in the reading user's time zone; a refused write's reason is in
 the error's `detail`.
+
+Journal entries are read oldest first by `sys_created_on`, then by their id (0.2.19, finding #63): the instance
+stores the time to the second and exposes no sequence of the journal, so the two status notes the suite writes
+in one second came back in either order, and the suite failed one run in a few. Within one second the order is
+the ids', not the order of writing; it is the same on every read and `tracker_upsert_status` reads its newest
+status in it (`server/TRACKER_PROFILE.md`). Under unit tests red without it, and asserted so by the suite.
 
 The change request's move along its change model and the queue poll's paging (0.2.12, findings #24 and #25)
 are under unit tests and in this suite (`test_a_change_request_is_filed_once_and_its_state_model_is_said`,

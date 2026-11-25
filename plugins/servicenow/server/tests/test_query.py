@@ -23,6 +23,17 @@ def test_typed_filters_are_encoded() -> None:
     )
 
 
+def test_a_second_order_breaks_the_ties_of_the_first() -> None:
+    query = Query("sys_journal_field").order("sys_created_on", descending=True).then("sys_id", descending=True)
+    assert query.encode() == "ORDERBYDESCsys_created_on^ORDERBYDESCsys_id"
+    assert parse_encoded(query.encode())[1] == [("sys_created_on", True), ("sys_id", True)]
+    assert query.order("sys_id").encode() == "ORDERBYsys_id"  # order() starts again
+    with pytest.raises(ValueError, match="order"):
+        Query("incident").then("sys_id")
+    with pytest.raises(Refused):
+        Query("incident").order("number").then("no_such_field")
+
+
 def test_an_injected_or_clause_stays_inside_the_value() -> None:
     query = Query("incident").where(Filter(field="active", value="true"), like("short_description", "x^ORactive=false"))
     encoded = query.encode()

@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+# Alert triage under approval: alert → triage (agent) → review (on call) → done.
+#
+# - The agent finds the instance that fires the alert, reads, groups and proposes. `create_silence`, if it
+#   calls it, is a governed action waiting in Approvals (it always needs a person, and expiring it is its
+#   declared compensation); nothing reaches the provider from the run itself. `add_annotation` follows the
+#   project's policy.
+# - The person on call reads the report and settles the outcome: escalate with the page text, fix the rule,
+#   or note that it resolved. A proposed silence is decided in Approvals, by a person who reads the matchers
+#   and the duration.
+# - There is no platform step that silences: the workflow cannot name a connector, since the provider is
+#   whichever instance the organisation connected. The silence is the agent's governed proposal.
+# - A failed triage goes back to the queue untouched: the agent writes nothing on failure.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: alert-triage
+  version: 1
+  description: Firing alerts triaged by an agent, reviewed by the person on call, silenced only when a person approves.
+  # All optional: a webhook fills them from the alert; by hand, say what to triage or leave empty for everything firing.
+  inputs:
+    type: object
+    properties:
+      alertname: { type: string, title: Alert name, maxLength: 200 }
+      severity: { type: string, title: Severity, maxLength: 40 }
+      rule_id: { type: string, title: Alert rule id, maxLength: 80 }
+      starts_at: { type: string, title: Started at, maxLength: 40 }
+initial: alert
+actors:
+  triager: { type: agent, role: triage, agent: alert-triage, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  on_call: { type: human, group: on-call, sla_hours: 1 }
+states:
+  alert: { display: Alert received, kind: wait }
+  awaiting_review: { display: Triage to review, kind: wait }
+  done: { display: Handled, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the person on call, terminal: true }
+transitions:
+  - id: t-triage
+    from: alert
+    to: awaiting_review
+    by: triager
+    outputs: [alert_triage_markdown, decision]
+    output_types: { alert_triage_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: alert, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-review
+    from: awaiting_review
+    to: done
+    by: on_call
+    task:
+      title: Settle the outcome
+      instructions: >-
+        Read the triage report: which instance fires the alerts, the groups, the verdict and its evidence.
+        Escalate with the page text it proposes, fix the rule it names, or note that the alert resolved. If it
+        proposes a silence, read its matchers (exact, copied from the alert) and its duration, then decide it
+        in Approvals; a silence mutes the page, not the problem. Write what was decided and who takes it.
+        Reject to send the alert back for another triage.
+      form:
+        type: object
+        required: [outcome_note]
+        properties:
+          outcome_note: { type: string, title: What was decided, minLength: 1, maxLength: 2000 }
+      attest: I read the triage and recorded the outcome
+    on_reject: alert
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: on_call
+    timeout_hours: 24
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

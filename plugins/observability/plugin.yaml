@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `observability` plugin (ADR 0224): the observability profile (what any alerting and metrics provider's
+# server must serve), the provider-neutral agent `alert-triage`, its skill, the `alert-triage` template and the
+# evals. It brings no server: a provider plugin (`observability-grafana`, ...) brings one that
+# `implements: [observability/observability@1]`.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: observability
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Triage firing alerts at any observability provider for the person on call: an agent groups the alerts that
+    share a cause, reads the rule, the metric, the logs and the deploy markers, decides real incident, noise or
+    known flapping, and proposes to escalate, to silence briefly or to fix the rule; the person decides, and a
+    silence is a governed action that a person approves. The agent names no provider: it works with whichever
+    observability server plugins the organisation installed.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `contents.profiles` and `mcp_servers[].profile` arrive with the core stories S86-01/S86-02. The first core
+  # release that carries them is not known yet: this floor is a placeholder to set to that release.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  profiles: [profiles/observability.yaml]
+  agents: [agents/alert-triage.yaml]
+  skills: [skills/alert-triage]
+  templates: [templates/alert-triage]
+  evals: [evals/alert-triage.yaml]

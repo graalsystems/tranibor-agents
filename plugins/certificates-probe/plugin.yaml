@@ -20,7 +20,7 @@ metadata:
   # says the same.
   core: ">=0.30.0,<1.0.0"
 requires:
-  plugins: [certificates]
+  plugins: [{name: certificates, version: ">=0.1.0,<1.0.0"}]
   connectors: {}
 contents:
   procedures: ["procedures/*.md"]

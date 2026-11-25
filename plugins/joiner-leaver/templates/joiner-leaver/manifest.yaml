@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: joiner-leaver
+  version: 0.1.0
+  display: Joiner, mover, leaver (IT access)
+  description: >-
+    A person joins, changes role or leaves. The request names the person, the date, the role, the manager
+    and an approver; an agent reads Keycloak and the organisation's role catalogue and proposes a plan —
+    account, groups to remove, groups to add, the invitation e-mail, or on the last day disable and end
+    the sessions — and lists what a person must do by hand. The manager, then IT, approve the plan; each
+    write to Keycloak is then its own governed action with its own approvers, re-authenticated, never the
+    person concerned nor the one who asked; a read-back checks the result and a person closes the manual
+    tasks. The agent writes nothing and nothing is ever deleted.
+requires:
+  # The project: its work items live in the platform, so a form or a trigger can open them.
+  connectors:
+    tracker: internal
+  # The organisation: the connector every write calls, by NAME, and its capability (the `keycloak-admin`
+  # plugin's server, installed and configured in the organisation).
+  org_connectors:
+    keycloak: mcp
+defaults:
+  workflows:
+    - ./workflows/joiner-leaver.yaml
+    - ./workflows/jml-create-account.yaml
+    - ./workflows/jml-group-add.yaml
+    - ./workflows/jml-group-remove.yaml
+    - ./workflows/jml-invite.yaml
+    - ./workflows/jml-disable.yaml
+    - ./workflows/jml-logout.yaml
+  default_workflow: joiner-leaver
+  policy: preset:solo
+  # The agent `people-ops-it` and the skills `jml-checklist` and `role-catalogue` come with the plugin
+  # itself (installed in the organisation when the plugin is): the organisation publishes its own version
+  # of `role-catalogue`, which is its table of roles and groups.
+inputs: []
+steps: []

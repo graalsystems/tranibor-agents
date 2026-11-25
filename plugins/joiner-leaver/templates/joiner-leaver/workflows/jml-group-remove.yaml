@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+# One person out of one Keycloak group, as one governed action, compensated by the addition back.
+#
+# Opened by `joiner-leaver` (its `spawn:`) with what the plan the manager and IT approved says: the
+# person is always the parent's own `username`, never an agent's reading of it. ONE governed action:
+# `remove_user_from_group` on the organisation's `keycloak` connector, compensated. It waits for a member of
+# `jml-approvers-<approver_group>` (the role catalogue names the suffix), signed in again in the last five
+# minutes; the person concerned, who asked and the person's manager may not decide it, administrators
+# included (segregation of duties), and it is applied no earlier than `effective_date`.
+# Removing access is never silent: a mover's old groups and a leaver's groups are each approved.
+# Refused, the child ends `refused` and nothing is written. A failure after approval is not proposed again
+# on its own: a person reads the cause first (`needs_review`).
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: jml-group-remove
+  version: 1
+  description: "One person out of one Keycloak group, as one governed action, compensated by the addition back."
+  inputs:
+    type: object
+    required: [username, user_id, effective_date, approver_group, reason, approver, group_id, group_path, sensitive]
+    properties:
+      username: { type: string, title: Account (username), minLength: 1, maxLength: 120, pattern: "^[A-Za-z0-9._@+-]+$" }
+      user_id: { type: string, title: Keycloak user id, pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      effective_date: { type: string, format: date, title: Date it is applied }
+      approver_group: { type: string, title: Approvers (role catalogue), pattern: "^[a-z0-9][a-z0-9-]{0,60}$" }
+      reason: { type: string, title: Reason, minLength: 1, maxLength: 1000 }
+      # Who named the person's approver, who asked, the person's manager, and the parent's key.
+      approver: { type: string, title: Approver named by the request, maxLength: 200 }
+      requester: { type: string, title: Requested by, maxLength: 200 }
+      manager: { type: string, title: Manager, maxLength: 200 }
+      request: { type: string, title: Request, maxLength: 255 }
+      group_id: { type: string, title: Keycloak group id, pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      group_path: { type: string, title: Group path, minLength: 1, maxLength: 200 }
+      sensitive: { type: boolean, title: Sensitive group (role catalogue) }
+initial: requested
+actors:
+  it: { type: human, group: it-desk, sla_hours: 24 }
+  platform: { type: system }
+states:
+  requested: { display: Write to approve, kind: wait }
+  applied: { display: Applied, terminal: true }
+  refused: { display: Refused, terminal: true }
+  needs_review: { display: Write failed, kind: wait }
+  abandoned: { display: Abandoned, terminal: true }
+transitions:
+  - id: t-apply
+    from: requested
+    to: applied
+    by: platform
+    action:
+      kind: jml.group_remove
+      title: "{{ '[sensitive] ' if fields.sensitive else '' }}Remove {{ fields.username }} ({{ fields.user_id }}) from group {{ fields.group_id }} ({{ fields.group_path }}), applied {{ fields.effective_date }}"
+      justification: "{{ fields.reason }} (approver named: {{ fields.approver }}; requested by {{ fields.requester | default('unknown', true) }}, request {{ fields.request | default('none', true) }})"
+      params:
+        username: "{{ fields.username }}"
+        user_id: "{{ fields.user_id }}"
+        group_id: "{{ fields.group_id }}"
+        group_path: "{{ fields.group_path }}"
+        sensitive: "{{ 'yes' if fields.sensitive else 'no' }}"
+      effects:
+        - effect: connector.call
+          with:
+            connector: keycloak
+            operation: remove_user_from_group
+            arguments: { user_id: "{{ params.user_id }}", group_id: "{{ params.group_id }}" }
+          compensate:
+            effect: connector.call
+            with:
+              connector: keycloak
+              operation: add_user_to_group
+              arguments: { user_id: "{{ params.user_id }}", group_id: "{{ params.group_id }}" }
+      approval:
+        approvers: [{ role: approver, group: "jml-approvers-{{ fields.approver_group }}", min: 1 }]
+        excluded: ["{{ fields.username }}", "{{ fields.requester }}", "{{ fields.manager }}"]
+        step_up_minutes: 5
+      not_before: fields.effective_date
+    on_reject: refused
+    on_fail: { to: requested, max_attempts: 1, escalate_to: needs_review }
+
+  # A write that failed: a person retries it once the cause is fixed, or abandons it. Without a decision in
+  # 30 days it is abandoned.
+  - id: t-retry
+    from: needs_review
+    to: requested
+    by: it
+    timeout_hours: 720
+    on_reject: abandoned

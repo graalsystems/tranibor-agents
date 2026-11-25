@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+# One account created in Keycloak for a joiner, as one governed action the IT approvers decide. Never deletes, never grants a group: the groups are their own actions.
+#
+# Opened by `joiner-leaver` (its `spawn:`) with what the plan the manager and IT approved says: the
+# person is always the parent's own `username`, never an agent's reading of it. ONE governed action:
+# `create_user` on the organisation's `keycloak` connector, with no compensation. It waits for a member of
+# `jml-approvers-<approver_group>` (the role catalogue names the suffix), signed in again in the last five
+# minutes; the person concerned, who asked and the person's manager may not decide it, administrators
+# included (segregation of duties), and it is applied no earlier than `effective_date`.
+# The account is created with no group and no credential: the person sets a password through the required-actions e-mail, a separate action. There is no compensation: a created account is disabled by a `jml-disable` action, never deleted.
+# Refused, the child ends `refused` and nothing is written. A failure after approval is not proposed again
+# on its own: a person reads the cause first (`needs_review`).
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: jml-create-account
+  version: 1
+  description: "One account created in Keycloak for a joiner, as one governed action the IT approvers decide. Never deletes, never grants a group: the groups are their own actions."
+  inputs:
+    type: object
+    required: [username, effective_date, approver_group, reason, approver, email, first_name, last_name]
+    properties:
+      username: { type: string, title: Account (username), minLength: 1, maxLength: 120, pattern: "^[A-Za-z0-9._@+-]+$" }
+      effective_date: { type: string, format: date, title: Date it is applied }
+      approver_group: { type: string, title: Approvers (role catalogue), pattern: "^[a-z0-9][a-z0-9-]{0,60}$" }
+      reason: { type: string, title: Reason, minLength: 1, maxLength: 1000 }
+      # Who named the person's approver, who asked, the person's manager, and the parent's key.
+      approver: { type: string, title: Approver named by the request, maxLength: 200 }
+      requester: { type: string, title: Requested by, maxLength: 200 }
+      manager: { type: string, title: Manager, maxLength: 200 }
+      request: { type: string, title: Request, maxLength: 255 }
+      email: { type: string, title: E-mail, minLength: 3, maxLength: 200, pattern: "^[^@\\s]+@[^@\\s]+$" }
+      first_name: { type: string, title: First name, minLength: 1, maxLength: 100 }
+      last_name: { type: string, title: Last name, minLength: 1, maxLength: 100 }
+initial: requested
+actors:
+  it: { type: human, group: it-desk, sla_hours: 24 }
+  platform: { type: system }
+states:
+  requested: { display: Write to approve, kind: wait }
+  applied: { display: Applied, terminal: true }
+  refused: { display: Refused, terminal: true }
+  needs_review: { display: Write failed, kind: wait }
+  abandoned: { display: Abandoned, terminal: true }
+transitions:
+  - id: t-apply
+    from: requested
+    to: applied
+    by: platform
+    action:
+      kind: jml.create_account
+      title: "Create the account {{ fields.username }} ({{ fields.email }}), applied {{ fields.effective_date }}"
+      justification: "{{ fields.reason }} (approver named: {{ fields.approver }}; requested by {{ fields.requester | default('unknown', true) }}, request {{ fields.request | default('none', true) }})"
+      params:
+        username: "{{ fields.username }}"
+        email: "{{ fields.email }}"
+        first_name: "{{ fields.first_name }}"
+        last_name: "{{ fields.last_name }}"
+      effects:
+        - effect: connector.call
+          with:
+            connector: keycloak
+            operation: create_user
+            arguments: { username: "{{ params.username }}", email: "{{ params.email }}", first_name: "{{ params.first_name }}", last_name: "{{ params.last_name }}" }
+      approval:
+        approvers: [{ role: approver, group: "jml-approvers-{{ fields.approver_group }}", min: 1 }]
+        excluded: ["{{ fields.username }}", "{{ fields.requester }}", "{{ fields.manager }}"]
+        step_up_minutes: 5
+      not_before: fields.effective_date
+    on_reject: refused
+    on_fail: { to: requested, max_attempts: 1, escalate_to: needs_review }
+
+  # A write that failed: a person retries it once the cause is fixed, or abandons it. Without a decision in
+  # 30 days it is abandoned.
+  - id: t-retry
+    from: needs_review
+    to: requested
+    by: it
+    timeout_hours: 720
+    on_reject: abandoned

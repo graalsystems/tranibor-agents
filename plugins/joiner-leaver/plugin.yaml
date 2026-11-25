@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# The joiner-leaver plugin: onboarding, role change and offboarding of a person across systems. It ships
+# NO server (the exception to "one server per plugin"): it orchestrates the connectors of other plugins —
+# today `keycloak`, from the `keycloak-admin` plugin — as an agent that reads and proposes, a template that
+# governs each write, and the two skills the agent follows.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: joiner-leaver
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Joiners, movers and leavers: an agent turns a request into a checklist and a plan from the role
+    catalogue and Keycloak, the manager and IT approve it, each write to Keycloak is a governed action
+    approved on its own, and a read-back checks the result. A leaver is disabled and signed out on the end
+    date, never deleted; what a person must do by hand is listed.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `spawn:` with the `output_schema` guarantee (ADR 0057) and approvers read from the work item
+  # (`approval.excluded`, ADR 0196): the same floor as `access-requests` 0.2.0.
+  core: ">=0.28.0,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+  # The organisation connector the agent reads and the writes call, by name and capability. The manifest
+  # has no way to say "optional": every connector listed is required, so `microsoft-365` (read-only,
+  # delegated to one person) is not listed: this plugin does not use it. Systems not covered yet: README.
+  org_connectors:
+    keycloak: mcp
+contents:
+  agents: [agents/people-ops-it.yaml]
+  skills: [skills/jml-checklist, skills/role-catalogue]
+  templates: [templates/joiner-leaver]
+  evals: [evals/people-ops-it.yaml]

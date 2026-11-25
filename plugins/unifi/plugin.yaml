@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# The UniFi plugin (ADR 0093): an agent that diagnoses a UniFi network under human approval, the MCP
+# server it reads and writes through (the official Network Integration API of a console, and the cloud
+# Site Manager API when configured), the template that wires them into a project, and the procedure an
+# administrator follows on the console.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: unifi
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Diagnose a UniFi network under human approval: an agent reads sites, devices, statistics, clients,
+    networks and firmware state, explains slow Wi-Fi, an offline device, firmware drift or a client that
+    cannot connect, and proposes actions (restart, PoE power-cycle, guest access) that a network
+    administrator approves before anything is written.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `unifi-netops` declares its five components (ADR 0127), which a core before 0.25.1 refuses.
+  core: ">=0.25.1,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/unifi-netops.yaml]
+  skills: [skills/unifi-troubleshooting]
+  templates: [templates/lan-incident]
+  evals: [evals/unifi-netops.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/unifi.yaml]

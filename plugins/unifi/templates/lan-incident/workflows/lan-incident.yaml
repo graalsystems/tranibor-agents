@@ -1,0 +1,193 @@
+# SPDX-License-Identifier: Apache-2.0
+# A LAN or Wi-Fi incident: request → diagnosis (agent) → review (network administrator) → apply (platform) → done.
+#
+# - The agent only reads, and proposes. Any write it calls is a governed action waiting in Approvals;
+#   nothing reaches the console from the run itself. It writes `lan_diagnosis_markdown` and `action_kind`
+#   (`restart_device`, `power_cycle_port` or `none`).
+# - The platform routes on `action_kind` right after the diagnosis (`when` reads a whole output of the last
+#   step). `none` — nothing to do, or only a change plan (SSID, VLAN, channel, firmware: the official API
+#   serves no such edit) — goes to an administrator who reads it and closes it.
+# - A restart or a power-cycle goes to an administrator who settles the target in a form (the device, and
+#   the port for a power-cycle); the apply step is ONE governed action that administrators of the same group
+#   approve, re-authenticated, before the console is written. Rejecting leaves the network untouched.
+# - A failed diagnosis goes back to the request untouched: the agent writes nothing on failure.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: lan-incident
+  version: 1
+  description: A network complaint diagnosed by an agent, reviewed by a network administrator, and any restart or PoE power-cycle applied as one approved governed action.
+  inputs:
+    type: object
+    properties:
+      site_id: { type: string, title: Site id (optional), pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      requester: { type: string, title: Requester (sign-in name or e-mail), maxLength: 200 }
+      # Settled by the administrator in the review forms below.
+      device_id: { type: string, title: Device id, pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      port_idx: { type: string, title: Port index, pattern: "^[0-9]{1,4}$" }
+      reason: { type: string, title: Reason, maxLength: 1000 }
+      note: { type: string, title: What was done or decided, maxLength: 2000 }
+initial: requested
+actors:
+  netops: { type: agent, role: triage, agent: unifi-netops, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  network_admin: { type: human, group: network-admin, sla_hours: 8 }
+  platform: { type: system }
+states:
+  requested: { display: Incident received, kind: wait }
+  diagnosed: { display: Diagnosis written, kind: wait }
+  review_restart: { display: Restart to review, kind: wait }
+  review_cycle: { display: PoE power-cycle to review, kind: wait }
+  review_none: { display: Diagnosis to read, kind: wait }
+  approved_restart: { display: Restart approved, kind: wait }
+  approved_cycle: { display: PoE power-cycle approved, kind: wait }
+  done: { display: Handled, terminal: true }
+  no_change: { display: Left untouched, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the network administrators, terminal: true }
+transitions:
+  - id: t-diagnose
+    from: requested
+    to: diagnosed
+    by: netops
+    outputs: [lan_diagnosis_markdown, action_kind]
+    output_types: { lan_diagnosis_markdown: markdown }
+    gates:
+      - outputs_present
+      - name: outputs_in
+        params: { values: { action_kind: [none, restart_device, power_cycle_port] } }
+    on_fail: { to: requested, max_attempts: 2, escalate_to: needs_human }
+
+  # The conditional transitions come first: the first whose `when` holds is taken, the one without is the default.
+  - id: t-route-restart
+    from: diagnosed
+    to: review_restart
+    by: platform
+    when: { action_kind: restart_device }
+  - id: t-route-cycle
+    from: diagnosed
+    to: review_cycle
+    by: platform
+    when: { action_kind: power_cycle_port }
+  - id: t-route-none
+    from: diagnosed
+    to: review_none
+    by: platform
+
+  - id: t-review-none
+    from: review_none
+    to: done
+    by: network_admin
+    task:
+      title: Read the diagnosis
+      instructions: >-
+        Read the diagnosis and its change plan. Nothing was proposed that writes to the network. Make the
+        changes of the plan on the console yourself if you agree, then submit; reject to leave it.
+      form:
+        type: object
+        properties:
+          note: { type: string, title: What you did or decided, maxLength: 2000 }
+      attest: I read the diagnosis and its change plan
+    on_reject: no_change
+
+  - id: t-review-restart
+    from: review_restart
+    to: approved_restart
+    by: network_admin
+    task:
+      title: Settle the restart
+      instructions: >-
+        Read the diagnosis. A restart cuts every client of the device, and what hangs on it, for minutes.
+        Name the site and the device to restart exactly as the diagnosis says. Reject to leave the network
+        untouched.
+      form:
+        type: object
+        required: [site_id, device_id, reason]
+        properties:
+          site_id: { type: string, title: Site id, pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+          device_id: { type: string, title: Device id, pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+          reason: { type: string, title: Reason, minLength: 1, maxLength: 1000 }
+      attest: I reviewed the diagnosis and I accept that this device restarts
+    on_reject: no_change
+
+  - id: t-review-cycle
+    from: review_cycle
+    to: approved_cycle
+    by: network_admin
+    task:
+      title: Settle the PoE power-cycle
+      instructions: >-
+        Read the diagnosis. A power-cycle cuts, then restores, the PoE power of one switch port: whatever it
+        powers restarts. Name the site, the switch and the port index exactly as the diagnosis says. Reject
+        to leave the network untouched.
+      form:
+        type: object
+        required: [site_id, device_id, port_idx, reason]
+        properties:
+          site_id: { type: string, title: Site id, pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+          device_id: { type: string, title: Switch id, pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+          port_idx: { type: string, title: Port index, pattern: "^[0-9]{1,4}$" }
+          reason: { type: string, title: Reason, minLength: 1, maxLength: 1000 }
+      attest: I reviewed the diagnosis and I accept that this port loses power
+    on_reject: no_change
+
+  - id: t-apply-restart
+    from: approved_restart
+    to: done
+    by: platform
+    action:
+      kind: unifi.restart_device
+      title: "Restart device {{ fields.device_id }} ({{ work_item.key }})"
+      justification: "{{ fields.reason }}"
+      params:
+        site_id: "{{ fields.site_id }}"
+        device_id: "{{ fields.device_id }}"
+      effects:
+        - effect: connector.call
+          with:
+            connector: unifi
+            operation: restart_device
+            arguments: { site_id: "{{ params.site_id }}", device_id: "{{ params.device_id }}" }
+      approval:
+        approvers: [{ role: approver, group: network-admin, min: 1 }]
+        step_up_minutes: 5
+    on_reject: no_change
+    # A failure after approval is not played again on its own: a person reads the cause first.
+    on_fail: { to: approved_restart, max_attempts: 1, escalate_to: needs_human }
+
+  - id: t-apply-cycle
+    from: approved_cycle
+    to: done
+    by: platform
+    action:
+      kind: unifi.power_cycle_port
+      title: "Power-cycle port {{ fields.port_idx }} of {{ fields.device_id }} ({{ work_item.key }})"
+      justification: "{{ fields.reason }}"
+      params:
+        site_id: "{{ fields.site_id }}"
+        device_id: "{{ fields.device_id }}"
+        port_idx: "{{ fields.port_idx }}"
+      effects:
+        - effect: connector.call
+          with:
+            connector: unifi
+            operation: power_cycle_port
+            arguments: { site_id: "{{ params.site_id }}", device_id: "{{ params.device_id }}", port_idx: "{{ params.port_idx }}" }
+      approval:
+        approvers: [{ role: approver, group: network-admin, min: 1 }]
+        step_up_minutes: 5
+    on_reject: no_change
+    on_fail: { to: approved_cycle, max_attempts: 1, escalate_to: needs_human }
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: network_admin
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

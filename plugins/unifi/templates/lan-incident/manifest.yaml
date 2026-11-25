@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: lan-incident
+  version: 0.1.0
+  display: UniFi · LAN and Wi-Fi incident under approval
+  description: >-
+    A complaint about the network — slow Wi-Fi in a room, a device offline, a client that cannot connect —
+    becomes a work item, from the console, a trigger or an MCP client. The UniFi operator reads the console
+    and writes a diagnosis; a network administrator reviews it; when it proposes a restart or a PoE
+    power-cycle, the platform applies it as one governed action the administrators approve. Nothing is
+    written to the network before a person approves it.
+requires:
+  # The work items live in the platform: a person or a trigger opens them (ADR 0113).
+  connectors:
+    tracker: internal
+  # The organisation connector the plugin's install creates for its server, by name, and its capability.
+  org_connectors:
+    unifi: mcp
+defaults:
+  workflows: [./workflows/lan-incident.yaml]
+  default_workflow: lan-incident
+  policy: preset:solo
+  # The agent `unifi-netops` and the skill `unifi-troubleshooting` come with the plugin itself, so the
+  # template does not list them.
+inputs: []
+steps: []

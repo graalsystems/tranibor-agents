@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# The live-endpoint server of the `certificates` profile (ADR 0224): it serves certificates/certificates@1 by
+# opening a TLS connection to the hosts an administrator lists and reading the certificate each one serves.
+# The agent, skill, template and evals live in the `certificates` plugin, which this one requires.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: certificates-probe
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Serve what clients are actually presented, to the `certificates` plugin's agent: for each host an
+    administrator lists, the certificate it serves (issuer, names, expiry, chain, trust by the system roots),
+    and findings for what expires, is not trusted, has an incomplete chain, serves the wrong name or does not
+    answer. Read-only: it opens a TLS connection and sends no data. Only the listed hosts are ever dialled.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # Profiles (`implements`) arrive with the core stories S86-01/S86-02; the first core release that carries
+  # them is not known yet, so this floor is a placeholder to be set to that release. The `certificates` plugin
+  # says the same.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: [certificates]
+  connectors: {}
+contents:
+  procedures: ["procedures/*.md"]
+  servers: [servers/certificates-probe.yaml]

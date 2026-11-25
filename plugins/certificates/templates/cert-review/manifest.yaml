@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: cert-review
+  version: 0.1.0
+  display: Certificates · periodic review
+  description: >-
+    A periodic review of the TLS certificates an organisation depends on. A schedule opens one work item per
+    window; the certificate watch agent reads every certificate source the organisation installed and writes
+    a report of what expires or is broken, with the evidence and proposed fixes as text; a person reads it and
+    closes the item. Nothing is ever written to a certificate, a cluster or a DNS zone by the platform: no
+    server of the profile has a write tool.
+requires:
+  connectors:
+    # Work items are opened by a schedule, which the internal tracker provides.
+    tracker: internal
+defaults:
+  workflows: [./workflows/cert-review.yaml]
+  default_workflow: cert-review
+  policy: preset:solo
+  # The agent `cert-watch` and the skill `certificate-renewal-triage` come with the plugin itself. The template
+  # names no connector: the sources are whichever certificates server plugins the organisation installed.
+  # The schedule is the project's configuration, not the template's: its `defaults` takes no cron (see README.md for the `schedules:` block to add).
+inputs: []
+steps: []

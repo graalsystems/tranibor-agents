@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: Apache-2.0
+# The cert-manager server of the `certificates` profile, as the platform runs and governs it (ADR 0094,
+# ADR 0224). READ-ONLY: it declares no write operation, and its Kubernetes token needs get/list/watch on
+# cert-manager resources only (procedures/). Source: ../server. A tool not listed in `operations` is refused
+# by the platform.
+name: certificates-cert-manager
+# The profile this server serves (declared by the `certificates` plugin, which this plugin requires). The tools
+# below are the profile's, with its governance; the profile's conformance suite runs in ../server/tests.
+implements: [certificates/certificates@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/certificates-cert-manager-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [kube_api_url, kube_token]
+  properties:
+    kube_api_url:
+      type: string
+      title: Kubernetes API URL
+      format: uri
+      pattern: "^https://"
+      description: The Kubernetes API server URL, e.g. https://k8s.example.com:6443
+      x-env: CERTIFICATES_CERT_MANAGER_KUBE_API_URL
+      x-help: "`kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'` prints the one your kubeconfig uses. It must be an address the platform can reach: a cluster API on a private network is not reachable yet."
+      x-link: https://github.com/graalsystems/tranibor-agents/blob/main/plugins/certificates-cert-manager/README.md#reaching-the-system
+    kube_ca_cert:
+      type: string
+      title: API server CA (PEM)
+      description: PEM text of the CA that signed the API server's certificate. Leave empty when it chains to the system roots.
+      x-env: CERTIFICATES_CERT_MANAGER_KUBE_CA_CERT
+      x-help: "`kubectl -n kube-system get configmap kube-root-ca.crt -o jsonpath='{.data.ca\\.crt}'` prints the CA in-cluster clients use; use another one if the API is reached through a load balancer with its own certificate."
+      x-link: https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster/
+    kube_token:
+      type: string
+      title: Service account token
+      description: Bearer token of the read-only service account (see the procedure). Expires with its duration; renew it before.
+      x-env: CERTIFICATES_CERT_MANAGER_KUBE_TOKEN
+      x-help: "`kubectl -n certificates create token certificates --duration=2160h`, after creating the service account and the read-only role of the procedure. It is shown once."
+      x-link: https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_token/
+    namespaces:
+      type: array
+      title: Namespaces
+      items: {type: string}
+      description: Optional allow-list of namespaces to read (joined with commas). Empty means every namespace the token may list.
+      x-env: CERTIFICATES_CERT_MANAGER_NAMESPACES
+      x-help: Leave empty to read every namespace the token may list; list some to restrict the server to them, even if the token could read more.
+      x-link: https://cert-manager.io/docs/reference/api-docs/
+secret_fields: [kube_token]
+
+# The only host the server reaches: the Kubernetes API.
+egress:
+  from_fields: [kube_api_url]
+
+# Everything this server does is a read; none needs approval and none has an undo.
+operations:
+  - {name: get_provider, access: read}
+  - {name: list_certificates, access: read}
+  - {name: get_certificate, access: read}
+  - {name: list_findings, access: read}
+
+# The platform runs an eval instance of the image with exactly these variables (core #1372): the seeded
+# cluster, no network, nothing of the configuration.
+fake:
+  env: {CERTIFICATES_CERT_MANAGER_FAKE: "1"}
+  scenes: [default]

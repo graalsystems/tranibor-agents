@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# The live-endpoint server of the `certificates` profile, as the platform runs and governs it (ADR 0094,
+# ADR 0224). READ-ONLY: it opens a TLS connection to the hosts an administrator listed and writes nothing
+# anywhere. Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: certificates-probe
+# The profile this server serves (declared by the `certificates` plugin, which this plugin requires). The tools
+# below are the profile's, with its governance; the profile's conformance suite runs in ../server/tests.
+implements: [certificates/certificates@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/certificates-probe-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`. There is no secret: a handshake needs no credential.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [hosts]
+  properties:
+    hosts:
+      title: Hosts to probe
+      type: array
+      minItems: 1
+      items: {type: string}
+      description: >-
+        The hosts to probe over TLS, as host or host:port (443 by default), e.g. www.example.com,
+        mail.example.com:993 (joined with commas). Any other host is refused before a connection is made.
+      x-env: CERTIFICATES_PROBE_HOSTS
+      x-help: List every public name whose certificate matters, with its port when it is not 443 (mail, VPN, API gateways).
+      x-link: https://github.com/graalsystems/tranibor-agents/blob/main/plugins/certificates-probe/README.md#reaching-the-system
+
+# The hosts this server may reach are the ones the administrator typed: `from_fields` names `hosts`, whose
+# entries are host or host:port, not URLs. The server itself dials only those hosts, and the platform checks
+# each one against the organisation's network bounds (ADR 0224 section 6, README "Reaching the system").
+# Not confirmed: that the platform reads a bare host:port entry (it is documented for URLs).
+egress:
+  from_fields: [hosts]
+
+# Everything this server does is a read; none needs approval and none has an undo.
+operations:
+  - {name: get_provider, access: read}
+  - {name: list_certificates, access: read}
+  - {name: get_certificate, access: read}
+  - {name: list_findings, access: read}
+
+# The platform runs an eval instance of the image with exactly these variables (core #1372): the seeded
+# endpoints, no network, nothing of the configuration.
+fake:
+  env: {CERTIFICATES_PROBE_FAKE: "1"}
+  scenes: [default]

@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Argo CD server of the `gitops` profile, as the platform runs and governs it (ADR 0094, ADR 0224).
+# Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: gitops-argocd
+# The profile this server serves (declared by the `gitops` plugin, which this plugin requires). The tools below
+# are the profile's, with at least its governance; the profile's conformance suite runs in ../server/tests.
+implements: [gitops/gitops@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/gitops-argocd-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [base_url, token, projects]
+  properties:
+    base_url:
+      type: string
+      title: Argo CD URL
+      format: uri
+      pattern: "^https://"
+      description: The Argo CD server URL, e.g. https://argocd.example.com (the API is served under /api/v1).
+      x-env: GITOPS_ARGOCD_BASE_URL
+      x-help: The address you open Argo CD at, without a path. It must be reachable from the platform (see the README, "Reaching the system").
+      x-link: https://argo-cd.readthedocs.io/en/stable/developer-guide/api-docs/
+    token:
+      type: string
+      title: API token
+      minLength: 1
+      description: The API token of a dedicated local account (accounts.<name> with the apiKey capability), never admin.
+      x-env: GITOPS_ARGOCD_TOKEN
+      x-help: Generate it with `argocd account generate-token --account <name>`; the account's RBAC is in the procedure.
+      x-link: https://argo-cd.readthedocs.io/en/stable/operator-manual/user-management/#local-usersaccounts
+    projects:
+      type: array
+      title: AppProjects
+      minItems: 1
+      items: {type: string, minLength: 1}
+      description: The AppProjects this server may read and act on (joined with commas). An Application of any other project is refused, even to read.
+      x-env: GITOPS_ARGOCD_PROJECTS
+      x-help: Only the Applications of these projects are ever reachable through this connector, whatever the token allows. They are the profile's scopes.
+      x-link: https://argo-cd.readthedocs.io/en/stable/user-guide/projects/
+    ca_cert:
+      type: string
+      title: CA certificate
+      description: PEM text of the CA that signed Argo CD's certificate, when it is a private one.
+      x-env: GITOPS_ARGOCD_CA_CERT
+      x-help: Leave it empty when Argo CD's certificate is signed by a public CA.
+secret_fields: [token]
+
+# The only host the server may reach: Argo CD.
+egress:
+  from_fields: [base_url]
+
+# The governance floor of the profile, kept or raised. `access: read` is allowed by default; a write goes
+# through approval unless an administrator decides otherwise; `human_approval: true` is never lowered.
+# `refresh_application` is a write without `human_approval` on purpose: it only asks Argo CD to re-read git
+# and changes nothing in the cluster. There is no operation that deletes an Application, edits a spec (but the
+# automated-sync policy) or changes a project or RBAC: the server has no code for it.
+# `compensation` is the operation that undoes the write, its arguments rendered from the write's own result;
+# the platform renders every argument to a string, so the server accepts numbers and booleans as text.
+# `platform_arguments: [action_key]` is an idempotency key the platform fills, never the agent.
+operations:
+  - {name: get_provider, access: read}
+  - {name: list_applications, access: read}
+  - {name: get_application, access: read}
+  - {name: list_resources, access: read}
+  - {name: get_diff, access: read}
+  - {name: list_events, access: read}
+  - {name: get_sync_windows, access: read}
+  - {name: get_history, access: read}
+  - {name: get_revision_metadata, access: read}
+  - name: plan_sync
+    access: read
+    description: What a sync would do, computed from the diff. Writes nothing.
+
+  - name: refresh_application
+    access: write
+    description: Asks Argo CD to re-read git (normal) or to drop its manifest cache (hard). Nothing changes in the cluster.
+
+  - name: sync_application
+    access: write
+    human_approval: true
+    description: A full sync by default; a resource list only with a written justification. prune is false unless asked. With a revision, deploys that revision (how a rollback is undone). Idempotent through the platform's action_key.
+    platform_arguments: [action_key]
+
+  - name: rollback_application
+    access: write
+    human_approval: true
+    description: Redeploys the revision of a history entry; refused while auto-sync is on. Undone by a sync back to the revision that was in force.
+    compensation:
+      operation: sync_application
+      arguments:
+        name: "{{ result.application }}"
+        revision: "{{ result.previous_revision }}"
+        prune: "{{ 'true' if result.prune else 'false' }}"
+
+  - name: set_auto_sync
+    access: write
+    human_approval: true
+    description: Pauses or resumes the automated sync of one application (resuming restores the prune / self-heal settings that pausing saved). Undone by calling it with the previous state.
+    compensation:
+      operation: set_auto_sync
+      arguments:
+        name: "{{ result.application }}"
+        enabled: "{{ 'true' if result.previous_enabled else 'false' }}"
+
+# How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
+# switches it to its seeded in-memory Argo CD (server/src/tranibor_gitops_argocd/config.py), which no
+# configuration field reaches, and the one scene that instance serves.
+fake:
+  env: {GITOPS_ARGOCD_FAKE: "1"}
+  scenes: [default]

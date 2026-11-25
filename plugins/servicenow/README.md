@@ -269,7 +269,10 @@ ACLs of their own), the instance dropped them and answered 201, and the server s
 `Tranibor CI`, one member so that a change's group approval waits). It cancels its change at the end, so a
 run without a cleanup user leaves nothing in the queue, and its cleanup finds the run's records by their
 correlation id as well as their title. Under unit tests red without each fix; the suite passed (9 tests) on
-the Australia instance in the `Tranibor CI` group on 2026-11-25, as the instance's admin.
+the Australia instance in the `Tranibor CI` group on 2026-11-25, as the instance's admin. Its first run as the
+CI's integration user the same day was red, rightly: `tracker_create_item` answered `not_kept: ["description"]`,
+every incident the tracker had filed as that user was without its body, and the procedure now adds the role to
+the `incident.description` write ACL too (0.2.21).
 
 The change request's move along its change model and the queue poll's paging (0.2.12, findings #24 and #25)
 are under unit tests and in this suite (`test_a_change_request_is_filed_once_and_its_state_model_is_said`,

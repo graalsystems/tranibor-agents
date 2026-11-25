@@ -149,7 +149,11 @@ the three marked *role added*):
   `close_notes`. Never `priority`: ServiceNow computes it.
 - **Write** on `sc_req_item` and `change_request`: `work_notes` and `state` (the tracker's state and status
   notes).
-- **Create** on `incident` (the tracker can open one) and on `change_request` (`create_change_request`,
+- **Create** on `incident` (the tracker can open one), its `description` included: the `incident.description`
+  write ACL (held by `sn_incident_write`) decides its creation too, so **add the role to it**; without it the
+  tracker's incidents are filed with an empty description and the answer says `not_kept` (seen on the
+  Australia instance on 2026-11-25, the first night of 0.2.20). The server never updates a description after
+  creation. And on `change_request` (`create_change_request`,
   always approved by a person), the change's `short_description` and `description` included: each has a
   write ACL of its own, `change_request.short_description` and `change_request.description`, held by
   `sn_change_write` only. **Add the role to both** (a `sys_security_acl_role` row each). Without them the
@@ -174,7 +178,8 @@ the three marked *role added*):
   (read), `incident.state`, `incident.impact`, `incident.urgency`, `incident.assigned_to`,
   `incident.close_code`, `incident.close_notes`, `incident.comments`, `incident.work_notes`,
   `change_request.state`, `change_request.work_notes` (write), `incident.short_description` (create), and
-  the role added to `change_request.short_description` and `change_request.description` write (2026-11-25) and
+  the role added to `incident.description`, `change_request.short_description` and `change_request.description`
+  write (2026-11-25) and
   to `change_request.*` write (a change's `correlation_id`: a field's create right is its
   write right, through the `*.*` create ACL), `task.state` and `task.work_notes` write (a request item's
   state and close note: `sc_req_item` inherits them from `task`).
@@ -221,8 +226,9 @@ organisation can only make that stricter.
   query do not have permission to be read`: the role lacks the table's read ACL (ServiceNow then filters
   every row out and answers 200) or a field's (see Permissions).
 - A creation answers `not_kept` and `ServiceNow filed the record without <table>.<field>`: the role cannot
-  create that field, and the instance filed the record without it. Grant it as Permissions says (for a change:
-  the role on the `change_request.short_description` and `change_request.description` write ACLs).
+  create that field, and the instance filed the record without it. Grant it as Permissions says (the role on
+  the `incident.description` write ACL; for a change, on `change_request.short_description` and
+  `change_request.description`).
 - A move answers `"closed": true` and `"changed": false`: the item was closed before the move, and a move never
   reopens it (on an incident, ServiceNow would clear its resolution and count a reopening). Reopen it with
   `reopen_incident`, which a person approves, or in ServiceNow.

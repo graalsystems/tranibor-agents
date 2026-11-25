@@ -102,8 +102,16 @@ async def test_an_incident_through_the_tracker_profile(mcp: LiveMcp, admin: Admi
     item = await mcp.call("tracker_fetch_item", key=key)
     bodies = [c["body"] for c in item["comments"]]
     assert sum(1 for b in bodies if b.startswith(note)) == 1  # verbatim, once
-    assert [b.split("\n")[0] for b in bodies if "[choregos-status:status]" in b] == ["Stage: triage", "Stage: review"]
     assert all(near_now(c["ts"]) for c in item["comments"]), [c["ts"] for c in item["comments"]]
+    # graalsystems/tranibor-agents#63: the two status notes are often written in the same second, all that
+    # `sys_created_on` holds. The profile's order is the time, then the entry's id: not write order within a
+    # second, but the same on every read, and the writer's newest status is the reader's.
+    order = [(c["ts"], c["id"]) for c in item["comments"]]
+    assert order == sorted(order), order
+    statuses = [b.split("\n")[0] for b in bodies if "[choregos-status:status]" in b]
+    assert sorted(statuses) == ["Stage: review", "Stage: triage"], statuses  # each once
+    newest = await mcp.call("tracker_upsert_status", key=key, markdown=statuses[-1], marker="status")
+    assert newest["written"] is False
 
     closed = await mcp.call("tracker_close", key=key)
     assert closed == {"key": key, "closed": True, "state": "Resolved"}

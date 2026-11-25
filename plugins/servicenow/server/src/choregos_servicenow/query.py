@@ -120,8 +120,8 @@ class Query:
 
     table: str
     groups: list[list[str]] = field(default_factory=list)
-    order_by: str | None = None
-    descending: bool = False
+    #: The ORDERBY clauses, `(field, descending)`, applied in turn: each breaks the ties of the ones before.
+    orders: list[tuple[str, bool]] = field(default_factory=list)
 
     def where(self, *filters: Filter) -> Query:
         for flt in filters:
@@ -136,14 +136,20 @@ class Query:
         return self
 
     def order(self, name: str, descending: bool = False) -> Query:
-        self.order_by = check_field(self.table, name)
-        self.descending = descending
+        """Sort by `name`, in place of any order set before."""
+        self.orders = [(check_field(self.table, name), descending)]
+        return self
+
+    def then(self, name: str, descending: bool = False) -> Query:
+        """A further key for the rows the order before leaves tied (ServiceNow applies ORDERBY in turn)."""
+        if not self.orders:
+            raise ValueError("then() breaks the ties of an order(): call order() first")
+        self.orders.append((check_field(self.table, name), descending))
         return self
 
     def encode(self) -> str:
         parts = ["^OR".join(group) for group in self.groups]
-        if self.order_by:
-            parts.append(f"{'ORDERBYDESC' if self.descending else 'ORDERBY'}{self.order_by}")
+        parts.extend(f"{'ORDERBYDESC' if descending else 'ORDERBY'}{name}" for name, descending in self.orders)
         return "^".join(parts)
 
 

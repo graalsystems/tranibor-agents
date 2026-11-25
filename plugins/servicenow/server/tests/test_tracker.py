@@ -78,6 +78,46 @@ async def test_upsert_status_adds_a_note_only_when_the_status_changes(mcp: Mcp, 
     assert {c["marker"] for c in item["comments"]} == {"s"}
 
 
+async def test_journal_entries_of_one_second_come_in_one_order(mcp: Mcp, fake: FakeServiceNow) -> None:
+    """graalsystems/tranibor-agents#63: `sys_created_on` holds the second, and a real instance answered two
+    status notes of the same second in either order. The entry's sys_id decides a tie, on every read, and
+    the status read as current is the newest in that order. The fake keeps the two rows in the other order,
+    so a read that leaves the tie to the instance fails here."""
+    sys_id = sys_id_of("INC0010011")
+    for stage in ("Triage", "Review"):
+        assert (await mcp.call("tracker_upsert_status", key="INC0010011", markdown=stage, marker="s"))["written"]
+    rows = fake.tables["sys_journal_field"]
+    triage, review = (rows.pop(row["sys_id"]) for row in fake.journal(sys_id))
+    review.update(sys_id="0" * 32, sys_created_on=triage["sys_created_on"])
+    triage.update(sys_id="f" * 32)
+    rows.update({review["sys_id"]: review, triage["sys_id"]: triage})
+
+    item = await mcp.call("tracker_fetch_item", key="INC0010011")
+    read = [(c["id"], c["body"].split("\n")[0]) for c in item["comments"]]
+    assert read == [("0" * 32, "Review"), ("f" * 32, "Triage")]
+    assert not (await mcp.call("tracker_upsert_status", key="INC0010011", markdown="Triage", marker="s"))["written"]
+    assert (await mcp.call("tracker_upsert_status", key="INC0010011", markdown="Review", marker="s"))["written"]
+
+
+async def test_rendered_journal_entries_of_one_second_come_in_one_order(mcp: Mcp, fake: FakeServiceNow) -> None:
+    """The same tie when the journal is read from the record's rendered fields (#63): the entry's derived id
+    decides it. The fake renders the later written first, so a sort on the date alone answers write order;
+    these two texts' ids rank the other way. The user reads UTC here: the dates were lost when a date's label
+    equalled its value."""
+    fake.journal_readable = False
+    sys_id = sys_id_of("INC0010011")
+    for stage in ("Triage", "Review"):
+        assert (await mcp.call("tracker_upsert_status", key="INC0010011", markdown=stage, marker="s"))["written"]
+    for row in fake.journal(sys_id):
+        row["sys_created_on"] = "2026-11-25 10:00:00"
+
+    item = await mcp.call("tracker_fetch_item", key="INC0010011")
+    assert [c["body"].split("\n")[0] for c in item["comments"]] == ["Review", "Triage"]
+    order = [(c["ts"], c["id"]) for c in item["comments"]]
+    assert {ts for ts, _ in order} == {"2026-11-25T10:00:00Z"} and order == sorted(order)
+    assert not (await mcp.call("tracker_upsert_status", key="INC0010011", markdown="Triage", marker="s"))["written"]
+
+
 async def test_close_each_kind_of_item_once(mcp: Mcp, fake: FakeServiceNow) -> None:
     closed = await mcp.call("tracker_close", key="INC0010011")
     assert closed == {"key": "INC0010011", "closed": True, "state": "Resolved"}
@@ -171,7 +211,8 @@ async def test_an_unreadable_journal_does_not_write_twice(mcp: Mcp, fake: FakeSe
 
     item = await mcp.call("tracker_fetch_item", key="INC0010011")
     ours = [c for c in item["comments"] if c["body"].startswith(("Run started.", "v1", "We are on it."))]
-    assert [c["marker"] for c in ours if c["visibility"] == "internal"] == ["c1", "s"]
+    # Written in the same second as a rule: their order is the ids', not the clock's (#63).
+    assert sorted(c["marker"] for c in ours if c["visibility"] == "internal") == ["c1", "s"]
     assert [c["visibility"] for c in ours].count("customer") == 1
     stored = {e["value"].split("\n")[0]: e["sys_created_on"] for e in notes}
     # The header's local time, back in UTC: the same instant as the stored entry.

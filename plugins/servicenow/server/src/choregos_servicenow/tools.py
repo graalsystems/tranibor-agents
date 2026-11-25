@@ -143,6 +143,14 @@ def parse_journal(table: str, sys_id: str, element: str, text: str, offset: time
     return entries
 
 
+def _newest_first(entry: dict[str, Any]) -> tuple[str, str]:
+    """The sort key of a rendered entry, reversed: its date, then its derived id where two dates tie.
+
+    An entry whose date could not be read keeps the place the rendering gave it (the sort is stable)."""
+    on = str(entry["created_on"] or "")
+    return on, str(entry["sys_id"]) if on else ""
+
+
 def _journal_entry(table: str, sys_id: str, element: str, value: str, on: str | None, by: str | None) -> dict[str, Any]:
     return {
         "sys_id": f"journal:{text_key(table, sys_id, element, on or '', value)}",
@@ -229,6 +237,12 @@ class ServiceNowTools:
         """The journal of a record, newest first, from `sys_journal_field`; or, when that table answers
         nothing, from the record's own journal fields (`journal_display`).
 
+        Newest first is `sys_created_on` descending, then the entry's `sys_id` descending: the instance
+        stores the time to the second and exposes no sequence of the journal, so two entries of the same
+        second come back in either order unless a second key decides (graalsystems/tranibor-agents#63).
+        The `sys_id` makes the order the same on every read; within one second it is not the order the
+        entries were written in, which nothing the instance answers holds.
+
         A real instance filters `sys_journal_field` rows silently for a user without its read ACL (an
         integration user with `itil`, checked on an Australia instance): an empty answer then hides
         every note, and an idempotence check that trusted it wrote the same note twice. The record's
@@ -239,7 +253,7 @@ class ServiceNowTools:
             eq("name", table),
             Filter(field="element", op=Op.in_, value=list(elements)),
         )
-        query.order("sys_created_on", descending=True)
+        query.order("sys_created_on", descending=True).then("sys_id", descending=True)
         rows = await self.client.list_records("sys_journal_field", query, limit=limit)
         if not rows:
             return (await self._journal_of_record(table, sys_id, elements))[: max(1, limit)]
@@ -256,11 +270,13 @@ class ServiceNowTools:
 
     async def _journal_of_record(self, table: str, sys_id: str, elements: tuple[str, ...]) -> list[dict[str, Any]]:
         record = await self.client.journal_display(table, sys_id, elements)
-        offset = _utc_offset(record["fields"].get("sys_updated_on"), record["display"].get("sys_updated_on"))
+        # A label equal to its value is not in `display` (`normalise`): a user who reads UTC.
+        updated = record["fields"].get("sys_updated_on")
+        offset = _utc_offset(updated, record["display"].get("sys_updated_on", updated))
         entries: list[dict[str, Any]] = []
         for element in elements:
             entries.extend(parse_journal(table, sys_id, element, str(record["display"].get(element) or ""), offset))
-        entries.sort(key=lambda e: str(e["created_on"] or ""), reverse=True)
+        entries.sort(key=_newest_first, reverse=True)
         return entries
 
     async def get_ci(self, sys_id: str | None = None, name: str | None = None) -> dict[str, Any]:

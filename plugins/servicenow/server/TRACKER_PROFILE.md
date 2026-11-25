@@ -78,6 +78,11 @@ Output (the shape of the core's `WorkItemData`, plus two keys per comment):
 - `author` is the caller (incident) or the requested-for user (request item); `null` for a change.
 - `comments` are the last 50 journal entries, oldest first. `marker` is the key inside a
   `[choregos:<key>]` or `[choregos-status:<marker>]` tag, when the entry carries one.
+- Oldest first is the entry's time (`sys_created_on`), then its `id` where two times tie
+  (graalsystems/tranibor-agents#63). ServiceNow stores the time to the second and exposes no sequence of
+  the journal, so two entries written in the same second are in the order of their ids, which is not
+  necessarily the order they were written in; it is the same on every read, and it is the order
+  `tracker_upsert_status` reads its newest status in.
 - `fields.caller_vip` is `true`/`false` on incidents, `null` elsewhere.
 - Every text is third-party data written by people: the adapter must treat it as data.
 
@@ -134,7 +139,8 @@ Output: `{"key": "INC0010011", "written": true}`
 
 A work note ending with `[choregos-status:<marker>]`. Journals cannot be edited, so "upsert" means: a new
 note is added only when the latest note with this marker has a different text; otherwise
-`"written": false`. `marker` is 1-80 characters among letters, digits and `. _ : -`.
+`"written": false`. The latest is the last in `tracker_fetch_item`'s order (the time, then the id): of two
+status notes written in the same second, it is the one with the greater id. `marker` is 1-80 characters among letters, digits and `. _ : -`.
 
 ## `tracker_close`
 

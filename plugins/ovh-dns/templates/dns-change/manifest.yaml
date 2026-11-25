@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: dns-change
+  version: 0.1.0
+  display: OVHcloud DNS · change under review
+  description: >-
+    A request to change a DNS name becomes a work item. The DNS steward reads the zone and writes a plan
+    with TTL advice and a rollback; the zone owner reviews and settles the change; the platform applies it
+    to OVHcloud as one governed action, then a second one refreshes the zone. Nothing is written to a zone
+    before a person approves it, and nothing is published before a second approval.
+requires:
+  connectors: {}
+  # The organisation connector the plugin's install creates for its server, by name, and its capability.
+  org_connectors:
+    ovh-dns: mcp
+defaults:
+  workflows: [./workflows/dns-change.yaml]
+  default_workflow: dns-change
+  policy: preset:solo
+  # The agent `dns-steward` and the skill `dns-change-hygiene` come with the plugin itself (installed in the
+  # organisation when the plugin is), so the template does not list them.
+inputs: []
+steps: []

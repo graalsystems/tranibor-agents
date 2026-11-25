@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# The OVHcloud DNS plugin: an agent that answers "point app.example.com to X" and "why does this name not
+# resolve", the MCP server it reads and writes zones through (OVHcloud API v1), the template that wires a
+# DNS change through review, and the procedure an administrator follows to create a restricted consumer key.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: ovh-dns
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Run DNS changes for zones hosted at OVHcloud under human approval: an agent reads a zone, plans the
+    minimal change with TTL advice and finds dangling records, the zone owner reviews, and the platform
+    applies and refreshes the zone as governed actions. Only the zones an administrator lists are reachable.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # The floor is the core the repository's CI validates against (0.29.2). The plugin uses the agent's five
+  # components (ADR 0127, core 0.25.1) and a server `fake` (core #1372); the lowest core that has them all
+  # was not bisected here.
+  core: ">=0.29.2,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/dns-steward.yaml]
+  skills: [skills/dns-change-hygiene]
+  templates: [templates/dns-change]
+  evals: [evals/dns-steward.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/ovh-dns.yaml]

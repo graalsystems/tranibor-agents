@@ -161,22 +161,35 @@ def _journal_entry(table: str, sys_id: str, element: str, value: str, on: str | 
     }
 
 
-def unkeyed(record: dict[str, Any]) -> dict[str, Any]:
-    """What a creation answers when the instance did not keep the `correlation_id` it was given.
+def unkept(record: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
+    """What a creation answers when the instance did not keep fields it was given.
 
-    A real instance drops a field the user cannot create silently (an `itil` user and `correlation_id`, on
-    an Australia instance): the record exists, and a replay of the same call files another one. Raising
-    would make the platform retry, and file one more each time; the answer says it instead."""
-    if str(record["fields"].get("correlation_id") or "").startswith("choregos:"):
+    A real instance files the record and drops, silently, every field the user cannot create: an `itil` user
+    and `correlation_id`, or the procedure's role and a change's `short_description` and `description`
+    (their own write ACLs, `change_request.short_description` and `change_request.description`, hold
+    `sn_change_write`; Australia, 2026-11-25). The record exists, so raising would make the platform retry,
+    and file one more each time a key was lost; the answer says it instead, naming the fields to grant. A
+    text cut at its field's length is kept (ServiceNow cuts without saying so): only an emptied field counts.
+    Without `correlation_id`, a replay of the same call files another record: `idempotent: false`."""
+    dropped = sorted(
+        name
+        for name, asked in values.items()
+        if str(asked or "").strip() and name in record["fields"] and not str(record["fields"].get(name) or "").strip()
+    )
+    if not dropped:
         return {}
-    log.warning("correlation_id_not_kept", table=record["table"], sys_id=record["sys_id"])
-    return {
-        "idempotent": False,
-        "warning": (
-            f"ServiceNow did not keep correlation_id on {record['table']}: a replay files a second record. "
-            f"Give the integration user's role the create right on {record['table']}.correlation_id."
-        ),
+    table = record["table"]
+    log.warning("creation_fields_not_kept", table=table, sys_id=record["sys_id"], fields=dropped)
+    said = ", ".join(f"{table}.{name}" for name in dropped)
+    answer: dict[str, Any] = {
+        "not_kept": dropped,
+        "warning": f"ServiceNow filed the record without {said}: give the integration user's role the create "
+        "right on each.",
     }
+    if "correlation_id" in dropped:
+        answer["idempotent"] = False
+        answer["warning"] += " Without correlation_id, a replay files a second record."
+    return answer
 
 
 class ServiceNowTools:
@@ -507,8 +520,6 @@ class ServiceNowTools:
         existing = await self.client.find_one(
             "change_request", Query("change_request").where(eq("correlation_id", correlation))
         )
-        if existing is not None:
-            return {"created": False, "correlation_id": correlation, "record": existing}
         values: dict[str, Any] = {
             "short_description": short_description,
             "description": description,
@@ -523,5 +534,8 @@ class ServiceNowTools:
             values["cmdb_ci"] = cmdb_ci
         if assignment_group:
             values["assignment_group"] = assignment_group
+        if existing is not None:
+            # A replay says what the first call's record lacks too: the agent reads the answer it gets.
+            return {"created": False, "correlation_id": correlation, "record": existing, **unkept(existing, values)}
         record = await self.client.create("change_request", values)
-        return {"created": True, "correlation_id": correlation, "record": record, **unkeyed(record)}
+        return {"created": True, "correlation_id": correlation, "record": record, **unkept(record, values)}

@@ -60,6 +60,19 @@ async def test_set_state_by_label(mcp: Mcp, fake: FakeServiceNow) -> None:
     assert "tracker_close" in await mcp.error("tracker_set_state", key="INC0010003", status="Resolved")
 
 
+async def test_a_closed_item_is_never_reopened_by_a_state_move(mcp: Mcp, fake: FakeServiceNow) -> None:
+    """graalsystems/tranibor-agents#66: a deployment's first state mirror (New) landed one second after the
+    incident was resolved, and moved it back: ServiceNow then cleared its resolution and counted a
+    reopening. A closed item stays closed; the answer says so."""
+    await mcp.call("tracker_close", key="INC0010003")
+    moved = await mcp.call("tracker_set_state", key="INC0010003", status="New")
+    assert moved == {"key": "INC0010003", "changed": False, "state": "Resolved", "closed": True, "ignored": []}
+    assert fake.tables["incident"][sys_id_of("INC0010003")]["state"] == "6"
+    await mcp.call("tracker_close", key="RITM0010001")
+    held = await mcp.call("tracker_set_state", key="RITM0010001", status="Work in Progress")
+    assert (held["changed"], held["closed"], held["state"]) == (False, True, "Closed Complete")
+
+
 async def test_comment_is_an_internal_work_note_and_idempotent(mcp: Mcp, fake: FakeServiceNow) -> None:
     first = await mcp.call("tracker_comment", key="INC0010011", markdown="Run started.", action_key="c1")
     again = await mcp.call("tracker_comment", key="INC0010011", markdown="Run started.", action_key="c1")
@@ -237,6 +250,26 @@ async def test_a_creation_whose_key_the_instance_dropped_says_so(mcp: Mcp, fake:
     fake.unwritable = set()
     kept = await mcp.call("tracker_create_item", title="Disk full", body="On db-prod-02.", action_key="k2")
     assert "idempotent" not in kept
+
+
+async def test_a_change_filed_without_its_title_says_so(mcp: Mcp, fake: FakeServiceNow) -> None:
+    """graalsystems/tranibor-agents#66: the procedure's role could not write a change's `short_description`
+    and `description` (write ACLs of their own, `sn_change_write`'s), and the instance filed the change
+    without them, answered 201, and the server said `created: true` and nothing else."""
+    fake.unwritable = {("change_request", "short_description"), ("change_request", "description")}
+    arguments = {
+        "short_description": "Reboot vpn-gw-01", "description": "From INC0010006.", "implementation_plan": "i",
+        "backout_plan": "b", "test_plan": "t", "action_key": "c-title",
+    }  # fmt: skip
+    first = await mcp.call("create_change_request", **arguments)
+    assert (first["created"], first["not_kept"]) == (True, ["description", "short_description"])
+    assert "change_request.short_description" in first["warning"] and "idempotent" not in first
+    again = await mcp.call("create_change_request", **arguments)  # the replay finds it, and says it too
+    assert (again["created"], again["not_kept"]) == (False, ["description", "short_description"])
+    fake.unwritable = set()
+    whole = await mcp.call("create_change_request", **{**arguments, "action_key": "c-whole"})
+    assert whole["record"]["fields"]["short_description"] == "Reboot vpn-gw-01"
+    assert "not_kept" not in whole and "warning" not in whole
 
 
 # ───── a change request moves along its change model (graalsystems/tranibor-agents#24) ─────

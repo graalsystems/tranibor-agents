@@ -256,6 +256,21 @@ in one second came back in either order, and the suite failed one run in a few. 
 the ids', not the order of writing; it is the same on every read and `tracker_upsert_status` reads its newest
 status in it (`server/TRACKER_PROFILE.md`). Under unit tests red without it, and asserted so by the suite.
 
+A state move never reopens a closed item, and a creation names every field the instance did not keep (0.2.20,
+finding #66). The nightly of graalsystems/tranibor failed on 2026-11-25 with its resolved incident still in the
+queue: the dev deployment's triage project watches the same instance's Service Desk group, opened the suite's
+incident as a work item, and its first state mirror (New) landed one second after the suite's resolve, and
+moved it back; ServiceNow then cleared the resolution and counted a reopening. `tracker_set_state` now leaves a
+closed item closed and answers `"closed": true`. The same night showed every change the suite had filed as the
+integration user untitled: the procedure's role could not write `short_description` and `description` (write
+ACLs of their own), the instance dropped them and answered 201, and the server said nothing; it now answers
+`not_kept`, and the procedure adds the role to both ACLs. The suite files in `TRANIBOR_LIVE_SERVICENOW_GROUP`
+(`Service Desk` by default): on an instance a deployment also watches, a group it does not (the CI uses
+`Tranibor CI`, one member so that a change's group approval waits). It cancels its change at the end, so a
+run without a cleanup user leaves nothing in the queue, and its cleanup finds the run's records by their
+correlation id as well as their title. Under unit tests red without each fix; the suite passed (9 tests) on
+the Australia instance in the `Tranibor CI` group on 2026-11-25, as the instance's admin.
+
 The change request's move along its change model and the queue poll's paging (0.2.12, findings #24 and #25)
 are under unit tests and in this suite (`test_a_change_request_is_filed_once_and_its_state_model_is_said`,
 `test_reads_say_what_their_bound_left_out`). The suite passed (9 tests) on the Australia Personal Developer

@@ -150,7 +150,12 @@ the three marked *role added*):
 - **Write** on `sc_req_item` and `change_request`: `work_notes` and `state` (the tracker's state and status
   notes).
 - **Create** on `incident` (the tracker can open one) and on `change_request` (`create_change_request`,
-  always approved by a person).
+  always approved by a person), the change's `short_description` and `description` included: each has a
+  write ACL of its own, `change_request.short_description` and `change_request.description`, held by
+  `sn_change_write` only. **Add the role to both** (a `sys_security_acl_role` row each). Without them the
+  instance files the change with an empty title and description and answers 201; the server's answer then
+  says `not_kept` and names them (found on the Australia instance on 2026-11-25, every change the live suite
+  had filed as the integration user was untitled: graalsystems/tranibor-agents#66).
 - **The Change Management API** (`/api/sn_chg_rest/change`): a change's
   state moves through it, to a state its change model reaches from the current one (`GET …/nextstates`,
   then `PATCH …/change/{sys_id}`), never through the Table API, whose write of a change's `state` the
@@ -169,7 +174,8 @@ the three marked *role added*):
   (read), `incident.state`, `incident.impact`, `incident.urgency`, `incident.assigned_to`,
   `incident.close_code`, `incident.close_notes`, `incident.comments`, `incident.work_notes`,
   `change_request.state`, `change_request.work_notes` (write), `incident.short_description` (create), and
-  the role added to `change_request.*` write (a change's `correlation_id`: a field's create right is its
+  the role added to `change_request.short_description` and `change_request.description` write (2026-11-25) and
+  to `change_request.*` write (a change's `correlation_id`: a field's create right is its
   write right, through the `*.*` create ACL), `task.state` and `task.work_notes` write (a request item's
   state and close note: `sc_req_item` inherits them from `task`).
 - A creation's `correlation_id` is the server's idempotency key: when the role cannot write it, ServiceNow
@@ -214,6 +220,12 @@ organisation can only make that stricter.
 - A read that answers nothing, or `403 Insufficient rights to query records — Field(s) present in the
   query do not have permission to be read`: the role lacks the table's read ACL (ServiceNow then filters
   every row out and answers 200) or a field's (see Permissions).
+- A creation answers `not_kept` and `ServiceNow filed the record without <table>.<field>`: the role cannot
+  create that field, and the instance filed the record without it. Grant it as Permissions says (for a change:
+  the role on the `change_request.short_description` and `change_request.description` write ACLs).
+- A move answers `"closed": true` and `"changed": false`: the item was closed before the move, and a move never
+  reopens it (on an incident, ServiceNow would clear its resolution and count a reopening). Reopen it with
+  `reopen_incident`, which a person approves, or in ServiceNow.
 - `ServiceNow did not apply <field> (asked …, kept …)`: ServiceNow answered 200 to the write and kept the
   old value, which it does for a field the role cannot write and for a value the field refuses (a category
   that does not exist). The server writes back the fields of the same call that were applied.

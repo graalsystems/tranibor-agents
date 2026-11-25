@@ -1,0 +1,619 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `identity` profile, version 1 (ADR 0224): what an MCP server must serve to be "a directory of people and
+# their access" for the `identity-steward` and `joiner-leaver` agents, whoever runs the directory. A provider's
+# server (`identity-keycloak`, later an Entra ID or an Authentik one) declares `implements: [identity/identity@1]`
+# and serves every tool below, with at least this governance.
+#
+# Vocabulary. A *directory* is one place people are kept: a Keycloak realm, an Entra ID tenant, an Authentik
+# tenant. It is opaque: its name is whatever the provider calls it, listed by `get_provider`, and every other
+# tool names the one it works in. A *user* has an opaque `id` and a `username`; a write may name the user by
+# either (exactly one of `user_id` and `username`). A *group* has an opaque `id` and a `path` that reads like
+# a path. A *privilege* is a provider's own name for an administrative power ("realm-admin", "manage-users").
+# `setup_actions` is a closed list the person is asked to complete at their next sign-in (or by a message):
+# set_password, enroll_mfa, enroll_passkey, verify_email, update_profile.
+#
+# What this profile never offers, whoever the provider is: reading a credential, a secret or a token;
+# impersonating a person; deleting an account; changing the directory's own settings. Offboarding is
+# disabling, ending sessions and removing memberships, which an administrator can undo.
+#
+# Writes return what undoes them: a membership write answers `changed` (undo it only when it is true);
+# disable_user and enable_user answer `previous_enabled`.
+#
+# Provider-specific tools beyond this list are allowed on a server; agents of this profile never see them.
+name: identity
+version: 1
+description: A directory of people and their access (users, groups, privileges, sessions, sign-in state), whatever the provider.
+tools:
+  - name: get_provider
+    access: read
+    description: >-
+      Which provider and which directories this instance serves. An agent reads it on every instance of the
+      profile first, to pick the instance that serves the directory it is asked about.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output: {$ref: "#/$defs/provider"}
+
+  - name: get_directory
+    access: read
+    description: >-
+      One directory's state: whether sign-in and administration events are kept and for how long (what a dormancy
+      review relies on), and whether the directory can send mail.
+    input: {$ref: "#/$defs/directory_only"}
+    output:
+      type: object
+      required: [directory, enabled, sign_in_events_enabled, admin_events_enabled]
+      properties:
+        directory: {type: string}
+        display_name: {type: string}
+        enabled: {type: boolean}
+        sign_in_events_enabled: {type: boolean}
+        admin_events_enabled: {type: boolean}
+        events_retention_days: {type: number, description: "How long events are kept; absent when the provider does not say."}
+        mail_configured: {type: boolean, description: "True when the directory can send mail (see send_setup_email)."}
+        user_count: {type: integer}
+
+  - name: find_users
+    access: read
+    description: Users of a directory, by free text (username, email, names) or by one exact field. Paginated.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+        search: {type: string, description: "Matches username, email, first and last name."}
+        username: {type: string}
+        email: {type: string}
+        exact: {type: boolean, description: "With username or email, an exact match instead of a substring."}
+        enabled: {type: boolean}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        offset: {type: integer, minimum: 0}
+    output:
+      type: object
+      required: [directory, users, count, has_more]
+      properties:
+        directory: {type: string}
+        users: {type: array, items: {$ref: "#/$defs/user"}}
+        count: {type: integer}
+        has_more: {type: boolean}
+
+  - name: get_user
+    access: read
+    description: >-
+      One user, by id or by exact username, with the kinds of second factor enrolled (never a credential's
+      content) and the setup actions still pending.
+    input: {$ref: "#/$defs/user_ref"}
+    output:
+      type: object
+      required: [directory, user]
+      properties:
+        directory: {type: string}
+        user: {$ref: "#/$defs/user"}
+        mfa_methods: {type: array, items: {type: string}, description: "Kinds of second factor enrolled, e.g. otp, webauthn; empty when none. Absent when the provider could not say."}
+
+  - name: list_user_groups
+    access: read
+    description: The groups a user belongs to.
+    input: {$ref: "#/$defs/user_ref"}
+    output:
+      type: object
+      required: [directory, user_id, groups, count]
+      properties:
+        directory: {type: string}
+        user_id: {type: string}
+        username: {type: string}
+        groups: {type: array, items: {$ref: "#/$defs/group"}}
+        count: {type: integer}
+
+  - name: list_groups
+    access: read
+    description: The directory's groups as a flat list with their paths, optionally with member counts.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+        search: {type: string, description: "Keeps the groups whose path contains the text."}
+        with_member_counts: {type: boolean}
+        limit: {type: integer, minimum: 1, maximum: 500}
+    output:
+      type: object
+      required: [directory, groups, count, truncated]
+      properties:
+        directory: {type: string}
+        groups: {type: array, items: {$ref: "#/$defs/group"}}
+        count: {type: integer}
+        truncated: {type: boolean}
+
+  - name: get_group_members
+    access: read
+    description: The direct members of a group, paginated.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory, group_id]
+      properties:
+        directory: {type: string}
+        group_id: {type: string}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        offset: {type: integer, minimum: 0}
+    output:
+      type: object
+      required: [directory, group, members, count, has_more]
+      properties:
+        directory: {type: string}
+        group: {$ref: "#/$defs/group"}
+        members: {type: array, items: {$ref: "#/$defs/user"}}
+        count: {type: integer}
+        has_more: {type: boolean}
+
+  - name: compare_group_members
+    access: read
+    description: >-
+      Membership drift: a group's direct members against the usernames that are expected to be in it (from an
+      HR list, a ticket, a role catalogue). Says who is missing and who is unexpected.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory, group_id, expected_usernames]
+      properties:
+        directory: {type: string}
+        group_id: {type: string}
+        expected_usernames: {type: array, items: {type: string}}
+    output:
+      type: object
+      required: [directory, group, missing, unexpected, matched, complete]
+      properties:
+        directory: {type: string}
+        group: {$ref: "#/$defs/group"}
+        missing: {type: array, items: {type: string}, description: Expected usernames that are not members.}
+        unexpected: {type: array, items: {$ref: "#/$defs/user"}, description: Members that are not expected.}
+        matched: {type: integer}
+        complete: {type: boolean, description: "False when the member list was cut; then `unexpected` may be incomplete."}
+
+  - name: list_user_sessions
+    access: read
+    description: A user's active sessions (start, last access, address, applications in use). No tokens.
+    input: {$ref: "#/$defs/user_ref"}
+    output:
+      type: object
+      required: [directory, user_id, sessions, count]
+      properties:
+        directory: {type: string}
+        user_id: {type: string}
+        username: {type: string}
+        sessions: {type: array, items: {$ref: "#/$defs/session"}}
+        count: {type: integer}
+
+  - name: list_privileged_users
+    access: read
+    description: >-
+      Who holds an administrative power in the directory, with each grant (`privilege`, and `via` direct or the
+      group that gives it). `scope` says what the provider could and could not see; read it before concluding
+      that nobody else is an administrator.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+    output:
+      type: object
+      required: [directory, users, count, scope, complete]
+      properties:
+        directory: {type: string}
+        users: {type: array, items: {$ref: "#/$defs/privileged_user"}}
+        count: {type: integer}
+        scope: {type: string, description: "What was read and what was not (for example composite or inherited grants)."}
+        complete: {type: boolean}
+
+  - name: dormant_users
+    access: read
+    description: >-
+      Enabled accounts with no sign-in in `days` days. Evidence of non-use, not proof: `reliable` is false, with
+      the reason in `evidence`, when sign-in events are off, kept for less than the window, or a read was cut.
+      Accounts younger than the window are not judged.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+        days: {type: integer, minimum: 1, maximum: 3650}
+        include_never_signed_in: {type: boolean}
+        limit: {type: integer, minimum: 1, maximum: 500}
+    output:
+      type: object
+      required: [directory, reliable, evidence, dormant, count]
+      properties:
+        directory: {type: string}
+        reliable: {type: boolean}
+        reason: {type: string}
+        evidence: {type: object}
+        dormant: {type: array, items: {$ref: "#/$defs/dormant_user"}}
+        count: {type: integer}
+
+  - name: users_without_mfa
+    access: read
+    description: >-
+      Enabled accounts with no second factor enrolled, among the first `max_users` users (one read per user;
+      `truncated` says the directory has more). Service accounts and accounts that sign in only through another
+      identity provider can appear: check before acting.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+        max_users: {type: integer, minimum: 1, maximum: 2000}
+        limit: {type: integer, minimum: 1, maximum: 500}
+    output:
+      type: object
+      required: [directory, users, count, total_without_mfa, users_examined, truncated]
+      properties:
+        directory: {type: string}
+        users: {type: array, items: {$ref: "#/$defs/user"}}
+        count: {type: integer}
+        total_without_mfa: {type: integer}
+        users_examined: {type: integer}
+        truncated: {type: boolean}
+
+  - name: users_without_group
+    access: read
+    description: Enabled users that belong to no group, among the first `max_users` users.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+        max_users: {type: integer, minimum: 1, maximum: 2000}
+        limit: {type: integer, minimum: 1, maximum: 500}
+    output:
+      type: object
+      required: [directory, users, count, total_without_group, users_examined, truncated]
+      properties:
+        directory: {type: string}
+        users: {type: array, items: {$ref: "#/$defs/user"}}
+        count: {type: integer}
+        total_without_group: {type: integer}
+        users_examined: {type: integer}
+        truncated: {type: boolean}
+
+  - name: list_sign_in_events
+    access: read
+    description: Sign-in events, newest first. Needs the directory to keep them (`get_directory`); says so when it does not.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+        types: {type: array, items: {type: string}, description: "Event types in the provider's words; the default is successful sign-ins."}
+        user_id: {type: string}
+        date_from: {type: string, format: date}
+        date_to: {type: string, format: date}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+    output:
+      type: object
+      required: [directory, events_enabled, events, count, has_more]
+      properties:
+        directory: {type: string}
+        events_enabled: {type: boolean}
+        events: {type: array, items: {$ref: "#/$defs/sign_in_event"}}
+        count: {type: integer}
+        has_more: {type: boolean}
+        note: {type: string}
+
+  - name: list_admin_events
+    access: read
+    description: >-
+      Administration events (who changed what in the directory), newest first. The content of what was changed is
+      never returned, only whether there was one.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory]
+      properties:
+        directory: {type: string}
+        operations: {type: array, items: {type: string}, description: "In the provider's words, e.g. CREATE, UPDATE, DELETE, ACTION."}
+        resource_types: {type: array, items: {type: string}}
+        actor_id: {type: string, description: "The administrator who did it."}
+        resource_path: {type: string}
+        date_from: {type: string, format: date}
+        date_to: {type: string, format: date}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+    output:
+      type: object
+      required: [directory, admin_events_enabled, events, count, has_more]
+      properties:
+        directory: {type: string}
+        admin_events_enabled: {type: boolean}
+        events: {type: array, items: {$ref: "#/$defs/admin_event"}}
+        count: {type: integer}
+        has_more: {type: boolean}
+        note: {type: string}
+
+  - name: plan_joiner
+    access: read
+    description: >-
+      Plans an arrival without writing anything: checks the account does not exist and the groups do, and returns
+      the writes to propose, in order, as `proposed_calls` (create_user, then add_user_to_group for each group,
+      then send_setup_email). An invalid plan has `errors` and no calls.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory, username, email, first_name, last_name]
+      properties:
+        directory: {type: string}
+        username: {type: string}
+        email: {type: string}
+        first_name: {type: string}
+        last_name: {type: string}
+        group_ids: {type: array, items: {type: string}, description: "The groups the person gets, by id (read them with list_groups)."}
+        setup_actions: {type: array, items: {$ref: "#/$defs/setup_action"}}
+    output: {$ref: "#/$defs/plan"}
+
+  - name: plan_leaver
+    access: read
+    description: >-
+      Plans a departure without writing anything: reads the account, its groups and its sessions, and returns the
+      writes to propose, in order, as `proposed_calls` (disable_user, logout_user when sessions are open, then
+      remove_user_from_group for each group). Never a deletion.
+    input: {$ref: "#/$defs/user_ref"}
+    output: {$ref: "#/$defs/plan"}
+
+  - name: create_user
+    access: write
+    human_approval: true
+    platform_arguments: [action_key]
+    description: >-
+      Creates an account. Idempotent on the username: an existing account is returned unchanged with
+      `created` false, never modified. No password is ever set: `setup_actions` and send_setup_email ask the person.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory, username]
+      properties:
+        directory: {type: string}
+        username: {type: string}
+        email: {type: string}
+        first_name: {type: string}
+        last_name: {type: string}
+        enabled: {type: boolean}
+        setup_actions: {type: array, items: {$ref: "#/$defs/setup_action"}}
+        action_key: {type: string}
+    output:
+      type: object
+      required: [directory, created, user]
+      properties:
+        directory: {type: string}
+        created: {type: boolean}
+        user: {$ref: "#/$defs/user"}
+        note: {type: string}
+
+  - name: add_user_to_group
+    access: write
+    description: "Adds a user to a group. Idempotent: `changed` is false when the user was already a member."
+    input: {$ref: "#/$defs/membership"}
+    output: {$ref: "#/$defs/membership_result"}
+
+  - name: remove_user_from_group
+    access: write
+    description: "Removes a user from a group. Idempotent: `changed` is false when the user was not a member."
+    input: {$ref: "#/$defs/membership"}
+    output: {$ref: "#/$defs/membership_result"}
+
+  - name: disable_user
+    access: write
+    human_approval: true
+    description: "Disables an account: it can no longer sign in. Sessions already open are not ended (see logout_user). Never deletes. Idempotent."
+    input: {$ref: "#/$defs/user_ref"}
+    output: {$ref: "#/$defs/enabled_result"}
+
+  - name: enable_user
+    access: write
+    human_approval: true
+    description: Enables an account. Idempotent.
+    input: {$ref: "#/$defs/user_ref"}
+    output: {$ref: "#/$defs/enabled_result"}
+
+  - name: logout_user
+    access: write
+    human_approval: true
+    description: Ends every session of a user, who must sign in again. Cannot be undone. Says how many sessions there were.
+    input: {$ref: "#/$defs/user_ref"}
+    output:
+      type: object
+      required: [directory, user_id, sessions_revoked]
+      properties:
+        directory: {type: string}
+        user_id: {type: string}
+        username: {type: string}
+        sessions_revoked: {type: integer}
+
+  - name: send_setup_email
+    access: write
+    human_approval: true
+    platform_arguments: [action_key]
+    description: >-
+      Emails the person a link to complete setup actions (set a password, enroll a second factor or a passkey,
+      verify the address, update the profile). Needs the person to have an address and the directory to send mail.
+    input:
+      type: object
+      additionalProperties: false
+      required: [directory, actions]
+      properties:
+        directory: {type: string}
+        user_id: {type: string}
+        username: {type: string}
+        actions: {type: array, minItems: 1, items: {$ref: "#/$defs/setup_action"}}
+        lifespan_seconds: {type: integer, minimum: 60, maximum: 2592000, description: "How long the link lives."}
+        action_key: {type: string}
+    output:
+      type: object
+      required: [directory, user_id, actions, sent]
+      properties:
+        directory: {type: string}
+        user_id: {type: string}
+        username: {type: string}
+        email: {type: string}
+        actions: {type: array, items: {type: string}}
+        lifespan_seconds: {type: integer}
+        sent: {type: boolean}
+        deduplicated: {type: boolean}
+
+$defs:
+  provider:
+    type: object
+    required: [instance, provider, directories]
+    properties:
+      instance: {type: string, description: "The name of this instance of the server (its connector name)."}
+      provider: {type: string, description: "The provider, e.g. keycloak."}
+      directories: {type: array, items: {type: string}, description: The directories this instance may touch (its allow-list).}
+  directory_only:
+    type: object
+    additionalProperties: false
+    required: [directory]
+    properties:
+      directory: {type: string}
+  user_ref:
+    type: object
+    additionalProperties: false
+    required: [directory]
+    properties:
+      directory: {type: string}
+      user_id: {type: string, description: "The provider's id for the user. Give exactly one of user_id and username."}
+      username: {type: string, description: "The exact username. Give exactly one of user_id and username."}
+  membership:
+    type: object
+    additionalProperties: false
+    required: [directory, group_id]
+    properties:
+      directory: {type: string}
+      user_id: {type: string}
+      username: {type: string}
+      group_id: {type: string}
+  membership_result:
+    type: object
+    required: [directory, user_id, group_id, was_member, changed]
+    properties:
+      directory: {type: string}
+      user_id: {type: string}
+      username: {type: string}
+      group_id: {type: string}
+      group_path: {type: string}
+      was_member: {type: boolean}
+      changed: {type: boolean, description: "True when this call changed the membership; undo it only then."}
+  enabled_result:
+    type: object
+    required: [directory, user_id, enabled, previous_enabled, changed]
+    properties:
+      directory: {type: string}
+      user_id: {type: string}
+      username: {type: string}
+      enabled: {type: boolean}
+      previous_enabled: {type: boolean}
+      changed: {type: boolean}
+  setup_action:
+    type: string
+    enum: [set_password, enroll_mfa, enroll_passkey, verify_email, update_profile]
+  user:
+    type: object
+    required: [id, username, enabled]
+    properties:
+      id: {type: string}
+      username: {type: string}
+      enabled: {type: boolean}
+      email: {type: string}
+      first_name: {type: string}
+      last_name: {type: string}
+      email_verified: {type: boolean}
+      created_at: {type: string}
+      setup_actions: {type: array, items: {type: string}}
+  group:
+    type: object
+    required: [id, path]
+    properties:
+      id: {type: string}
+      name: {type: string}
+      path: {type: string}
+      member_count: {type: integer}
+      member_count_is_a_floor: {type: boolean}
+  session:
+    type: object
+    required: [id]
+    properties:
+      id: {type: string}
+      started_at: {type: string}
+      last_access_at: {type: string}
+      ip_address: {type: string}
+      remember_me: {type: boolean}
+      applications: {type: array, items: {type: string}}
+  privileged_user:
+    type: object
+    required: [id, username, enabled, grants]
+    properties:
+      id: {type: string}
+      username: {type: string}
+      enabled: {type: boolean}
+      email: {type: string}
+      grants: {type: array, items: {$ref: "#/$defs/grant"}}
+  grant:
+    type: object
+    required: [privilege, via]
+    properties:
+      privilege: {type: string}
+      via: {type: string, description: '"direct", or "group:<path>" when a group gives it.'}
+  dormant_user:
+    type: object
+    required: [id, username, enabled]
+    properties:
+      id: {type: string}
+      username: {type: string}
+      enabled: {type: boolean}
+      email: {type: string}
+      created_at: {type: string}
+      last_sign_in_at: {type: string}
+      days_since_last_sign_in: {type: integer}
+      note: {type: string}
+  sign_in_event:
+    type: object
+    required: [type]
+    properties:
+      time: {type: string}
+      type: {type: string}
+      user_id: {type: string}
+      application: {type: string}
+      ip_address: {type: string}
+      error: {type: string}
+  admin_event:
+    type: object
+    properties:
+      time: {type: string}
+      operation: {type: string}
+      resource_type: {type: string}
+      resource_path: {type: string}
+      error: {type: string}
+      actor_id: {type: string}
+      actor_ip_address: {type: string}
+      representation_present: {type: boolean}
+  proposed_call:
+    type: object
+    required: [tool, arguments]
+    properties:
+      tool: {type: string}
+      arguments: {type: object}
+      reason: {type: string}
+  plan:
+    type: object
+    required: [directory, valid, errors, warnings, proposed_calls]
+    properties:
+      directory: {type: string}
+      valid: {type: boolean}
+      errors: {type: array, items: {type: string}}
+      warnings: {type: array, items: {type: string}}
+      state: {type: object, description: "What was read about the account before planning."}
+      proposed_calls: {type: array, items: {$ref: "#/$defs/proposed_call"}}

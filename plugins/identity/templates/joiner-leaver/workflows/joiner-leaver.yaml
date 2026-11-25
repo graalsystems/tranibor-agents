@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: Apache-2.0
+# One person joining or leaving: request → plan (agent) → review (IT identity) → done.
+#
+# - The request names the person, the date, the role, the manager and an APPROVER. The agent refuses, with no
+#   proposal, a request that names no approver or whose approver is the person; a refusal is reported to the
+#   reviewer in the report.
+# - The agent reads the directory and calls `plan_joiner` or `plan_leaver`; the writes it proposes are
+#   governed actions waiting in Approvals: nothing reaches the directory from the run itself. Create, disable,
+#   sign out and setup mail always need a person (the profile's floor); group changes follow the project's
+#   policy and the role catalogue's sensitive groups should be set to need approval there.
+# - Nothing is deleted anywhere: the profile has no delete.
+# - Dates: every write is applied no earlier than `effective_date`; the reviewer approves on or after it.
+# - SIMPLIFIED from the wave-1 `joiner-leaver` plugin: that one ran a child workflow per write and an agent
+#   phase to resolve the account id. Here the agent proposes the writes through the profile and the platform
+#   governs each one, as `dns-change` does; the profile's `plan_*` tools return the ordered calls.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: joiner-leaver
+  version: 1
+  description: A joiner or a leaver, planned by an agent, then reviewed and applied by IT identity through approvals.
+  inputs:
+    type: object
+    required: [directory, kind, username, effective_date, approver]
+    properties:
+      directory: { type: string, title: Directory, minLength: 1, maxLength: 200, description: The directory to change (the name the identity server lists) }
+      kind: { type: string, title: Joiner or leaver, enum: [joiner, leaver] }
+      full_name: { type: string, title: Full name, minLength: 1, maxLength: 200 }
+      username: { type: string, title: Account (username), minLength: 1, maxLength: 120, pattern: "^[A-Za-z0-9._@+-]+$" }
+      email: { type: string, title: E-mail, maxLength: 200 }
+      effective_date: { type: string, format: date, title: Start date or last day }
+      role: { type: string, title: Role (joiner), maxLength: 120 }
+      team: { type: string, title: Team, maxLength: 120 }
+      manager: { type: string, title: Manager (username or e-mail), maxLength: 200 }
+      approver: { type: string, title: Approver who authorised the request (name and e-mail), maxLength: 200 }
+      requester: { type: string, title: Requested by, maxLength: 200 }
+      notes: { type: string, title: Anything else, maxLength: 2000 }
+initial: received
+actors:
+  agent: { type: agent, role: plan, agent: joiner-leaver, model: "profile:standard", max_turns: 25, max_minutes: 10 }
+  it_identity: { type: human, group: it-identity, sla_hours: 24 }
+states:
+  received: { display: Request received, kind: wait }
+  awaiting_review: { display: Plan to review, kind: wait }
+  done: { display: Done, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Dropped, terminal: true, outcome: cancelled }
+transitions:
+  - id: t-plan
+    from: received
+    to: awaiting_review
+    by: agent
+    outputs: [joiner_leaver_markdown]
+    output_types: { joiner_leaver_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: received, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-review
+    from: awaiting_review
+    to: done
+    by: it_identity
+    task:
+      title: Review the plan, decide the writes and close the manual tasks
+      instructions: >-
+        Read the plan: the decision, the writes in order with their approver suffix and what undoes them, the
+        state the agent read, and the manual tasks. Decide each proposed action in Approvals, no earlier than
+        the effective date. A refused plan has no action: read why. Do the manual tasks by hand and say below
+        what was done and what was not. Reject to send the request back to the queue.
+      form:
+        type: object
+        required: [outcome]
+        properties:
+          outcome: { type: string, title: What was done by hand and what was not, minLength: 1, maxLength: 2000 }
+      attest: I reviewed the plan and decided its actions
+    on_reject: received
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: it_identity
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

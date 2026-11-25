@@ -1,0 +1,158 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Keycloak server of the `identity` profile, as the platform runs and governs it (ADR 0094, ADR 0224).
+# Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: identity-keycloak
+# The profile this server serves (declared by the `identity` plugin, which this plugin requires). The tools
+# below are the profile's, with at least its governance, plus two Keycloak-only reads (list_clients,
+# get_realm_summary); the profile's conformance suite runs in ../server/tests.
+implements: [identity/identity@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/identity-keycloak-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [base_url, realms, client_id, client_secret]
+  properties:
+    base_url:
+      type: string
+      format: uri
+      pattern: "^https://"
+      title: Keycloak URL
+      description: The Keycloak server URL, without /admin and without a trailing slash, e.g. https://sso.example.com. Keycloak 17 and later serves no /auth prefix; write it here if yours still does.
+      x-env: KEYCLOAK_BASE_URL
+      x-help: The address people use to sign in, without the realm and without /admin. It must be reachable from the platform (see the README, "Reaching the system").
+      x-link: https://www.keycloak.org/docs/latest/server_admin/
+    realms:
+      type: array
+      minItems: 1
+      items: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+      title: Realms
+      description: >-
+        The realms (the profile's "directories") this server may touch, by name, not display name, e.g. staff
+        (joined with commas). Any other realm is refused, even to read, whatever the service account allows.
+      x-env: KEYCLOAK_REALMS
+      x-help: Only these realms are ever reachable through this connector. The service account needs its roles in each of them.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#configuring-realms
+    client_id:
+      type: string
+      minLength: 1
+      title: Client ID
+      description: The clientId of the confidential client whose service account the connector uses (see the procedure).
+      x-env: KEYCLOAK_CLIENT_ID
+      x-help: The Client ID you chose when creating the client, for example tranibor-iam.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#_service_accounts
+    client_secret:
+      type: string
+      minLength: 1
+      title: Client secret
+      description: That client's secret (Credentials tab).
+      x-env: KEYCLOAK_CLIENT_SECRET
+      x-help: Clients, your client, Credentials tab, Client secret. Typed once; it is sealed afterwards.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#_service_accounts
+    token_realm:
+      type: string
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+      title: Token realm
+      description: The realm the client lives in, when it is not the first listed realm (typically master). Empty means the first listed realm.
+      x-env: KEYCLOAK_TOKEN_REALM
+      x-help: Leave empty when the client was created in the first realm of the list. A client that administers several realms usually lives in master.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#_service_accounts
+secret_fields: [client_secret]
+
+# The only host the server may reach: the Keycloak server.
+egress:
+  from_fields: [base_url]
+
+# The governance floor of the profile, kept or raised. `access: read` is allowed by default; a write goes
+# through approval unless an administrator decides otherwise; `human_approval: true` is never lowered.
+# `compensation` is the operation that undoes the write, its arguments rendered from the write's own result.
+# `platform_arguments: [action_key]` is an idempotency key the platform fills, never the agent.
+# No tool deletes a user, reads a credential, impersonates, changes realm settings or touches a client's
+# secret: none exists, and the service account is not asked for the roles that would allow it.
+operations:
+  - {name: get_provider, access: read}
+  - {name: get_directory, access: read}
+  - {name: find_users, access: read}
+  - {name: get_user, access: read}
+  - {name: list_user_groups, access: read}
+  - {name: list_groups, access: read}
+  - {name: get_group_members, access: read}
+  - {name: compare_group_members, access: read}
+  - {name: list_user_sessions, access: read}
+  - {name: list_privileged_users, access: read}
+  - {name: dormant_users, access: read}
+  - {name: users_without_mfa, access: read}
+  - {name: users_without_group, access: read}
+  - {name: list_sign_in_events, access: read}
+  - {name: list_admin_events, access: read}
+  - {name: plan_joiner, access: read}
+  - {name: plan_leaver, access: read}
+  # Keycloak only: not in the profile.
+  - {name: list_clients, access: read}
+  - {name: get_realm_summary, access: read}
+
+  - name: create_user
+    access: write
+    human_approval: true
+    description: A user without a password, idempotent on username (an existing user is returned unchanged) and through the platform's action_key.
+    platform_arguments: [action_key]
+  - name: add_user_to_group
+    access: write
+    description: A group membership, idempotent. Undone by removing it (check `changed`; a no-op add must not be undone).
+    compensation:
+      operation: remove_user_from_group
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+        group_id: "{{ result.group_id }}"
+  - name: remove_user_from_group
+    access: write
+    description: A group membership removed, idempotent. Undone by adding it back.
+    compensation:
+      operation: add_user_to_group
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+        group_id: "{{ result.group_id }}"
+  - name: disable_user
+    access: write
+    human_approval: true
+    description: Disables an account (never deletes it). Undone by enabling it.
+    compensation:
+      operation: enable_user
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+  - name: enable_user
+    access: write
+    human_approval: true
+    description: Re-enables an account. Undone by disabling it.
+    compensation:
+      operation: disable_user
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+  - name: logout_user
+    access: write
+    human_approval: true
+    description: Ends all of a user's sessions. Not undoable (the user signs in again).
+  - name: send_setup_email
+    access: write
+    human_approval: true
+    description: Emails the user a link to complete setup actions (set a password, enroll a second factor, verify the address), idempotent through the platform's action_key.
+    platform_arguments: [action_key]
+
+# How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
+# switches it to its seeded in-memory realms (server/src/tranibor_identity_keycloak/config.py), which no
+# configuration field reaches, and the one scene they serve. The platform adds its own token
+# (TRANIBOR_SERVER_TOKEN) and nothing of the configuration.
+fake:
+  env: {KEYCLOAK_FAKE: "1"}
+  scenes: [default]

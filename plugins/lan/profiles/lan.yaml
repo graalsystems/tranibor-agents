@@ -1,0 +1,353 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `lan` profile, version 1 (ADR 0224): what an MCP server must serve to be "a LAN provider" for the
+# `lan-steward` agent, whoever makes the switches, access points and gateways. A provider's server
+# (one plugin per vendor) declares `implements: [lan/lan@1]` and serves every
+# tool below, with at least this governance.
+#
+# Vocabulary. A *site* is one local network managed as a unit (a building, an office). A *device* is an
+# adopted network device: a switch, an access point or a gateway. A *client* is something connected to the
+# network now. A *network* is a VLAN or subnet; a *WLAN* is a Wi-Fi broadcast (SSID). Every id is opaque: only
+# the server that issued it reads it. `state` of a device is ONLINE or OFFLINE, or another word the provider
+# uses (updating, pending adoption, isolated); an agent treats anything but ONLINE as "not serving".
+#
+# A provider's API may lack a call. A tool the provider cannot serve is still served: it answers an error whose
+# text starts with `not_supported`, sends nothing upstream, and `get_provider` lists it in `unsupported_tools`.
+# An agent reads that list before it proposes a write.
+#
+# Writes return what undoes them where an undo exists: block_client and unblock_client undo each other.
+# restart_device, power_cycle_port and upgrade_firmware have no undo (a restart cannot be un-restarted); they
+# carry human_approval for that reason.
+#
+# Provider-specific tools beyond this list are allowed on a server; agents of this profile never see them.
+name: lan
+version: 1
+description: A site's local network (devices, clients, VLANs, Wi-Fi, firmware), whatever the vendor.
+tools:
+  - name: get_provider
+    access: read
+    description: >-
+      Which provider and which sites this instance serves, and which profile tools it cannot serve. An agent
+      reads it on every instance of the profile first, to pick the instance that serves the site it is asked
+      about, and to know which writes it may propose.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output: {$ref: "#/$defs/provider"}
+
+  - name: list_sites
+    access: read
+    description: The sites this instance can see. Every other tool takes a site id from here.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output:
+      type: object
+      required: [sites]
+      properties:
+        sites: {type: array, items: {$ref: "#/$defs/site"}}
+
+  - name: list_devices
+    access: read
+    description: A site's devices with their state and firmware, optionally only those in one state (for instance OFFLINE).
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id]
+      properties:
+        site_id: {type: string}
+        state: {type: string}
+    output:
+      type: object
+      required: [site_id, truncated, devices]
+      properties:
+        site_id: {type: string}
+        truncated: {type: boolean, description: True when more devices exist than are listed.}
+        devices: {type: array, items: {$ref: "#/$defs/device"}}
+
+  - name: get_device
+    access: read
+    description: One device in detail, with its ports (state, speed, PoE) and, for an access point, its radios.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, device_id]
+      properties:
+        site_id: {type: string}
+        device_id: {type: string}
+    output:
+      type: object
+      required: [site_id, device, ports]
+      properties:
+        site_id: {type: string}
+        device: {$ref: "#/$defs/device"}
+        ports:
+          type: array
+          items:
+            type: object
+            required: [idx]
+            properties:
+              idx: {type: integer, description: The port number, the argument of power_cycle_port.}
+        radios: {type: array, items: {type: object}}
+
+  - name: get_device_statistics
+    access: read
+    description: >-
+      A device's latest statistics: uptime, last heartbeat, CPU and memory, uplink rates and, for an access point,
+      the per radio transmit retry rate (a sign of radio contention or a weak link). A provider that does not
+      measure something leaves it out.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, device_id]
+      properties:
+        site_id: {type: string}
+        device_id: {type: string}
+    output:
+      type: object
+      required: [site_id, device_id]
+      properties:
+        site_id: {type: string}
+        device_id: {type: string}
+
+  - name: list_clients
+    access: read
+    description: The clients connected now, optionally only WIRED or WIRELESS ones, with the device they hang on.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id]
+      properties:
+        site_id: {type: string}
+        type: {type: string, description: WIRED, WIRELESS or another type the provider has.}
+    output:
+      type: object
+      required: [site_id, truncated, clients]
+      properties:
+        site_id: {type: string}
+        truncated: {type: boolean}
+        clients: {type: array, items: {$ref: "#/$defs/client"}}
+
+  - name: get_client
+    access: read
+    description: One connected client.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, client_id]
+      properties:
+        site_id: {type: string}
+        client_id: {type: string}
+    output:
+      type: object
+      required: [site_id, client]
+      properties:
+        site_id: {type: string}
+        client: {$ref: "#/$defs/client"}
+
+  - name: list_networks
+    access: read
+    description: The site's networks (VLAN id, enabled).
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id]
+      properties:
+        site_id: {type: string}
+    output:
+      type: object
+      required: [site_id, networks]
+      properties:
+        site_id: {type: string}
+        networks:
+          type: array
+          items:
+            type: object
+            required: [id, name, vlan_id, enabled]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              vlan_id: {type: integer}
+              enabled: {type: boolean}
+
+  - name: list_wlans
+    access: read
+    description: The site's Wi-Fi broadcasts (name, enabled, security type, bands). Never a passphrase.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id]
+      properties:
+        site_id: {type: string}
+    output:
+      type: object
+      required: [site_id, wlans]
+      properties:
+        site_id: {type: string}
+        wlans:
+          type: array
+          items:
+            type: object
+            required: [id, name, enabled]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              enabled: {type: boolean}
+
+  - name: firmware_status
+    access: read
+    description: Devices with a firmware update available, devices that are offline, and per model the versions in use.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id]
+      properties:
+        site_id: {type: string}
+    output:
+      type: object
+      required: [site_id, devices_examined, updatable, offline, by_model]
+      properties:
+        site_id: {type: string}
+        devices_examined: {type: integer}
+        updatable: {type: array, items: {$ref: "#/$defs/device"}}
+        offline: {type: array, items: {$ref: "#/$defs/device"}}
+        by_model:
+          type: array
+          items:
+            type: object
+            required: [model, devices]
+            properties:
+              model: {type: string}
+              devices: {type: integer}
+
+  - name: restart_device
+    access: write
+    human_approval: true     # a floor: an implementation may raise it, never lower it
+    description: >-
+      Restarts a device. Its clients, and everything that hangs on it, lose connection for minutes: a gateway
+      cuts the whole site off. No undo.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, device_id]
+      properties:
+        site_id: {type: string}
+        device_id: {type: string}
+    output:
+      type: object
+      required: [site_id, action, target]
+      properties:
+        site_id: {type: string}
+        action: {type: string}
+        target: {type: string, description: The device id.}
+        target_name: {type: [string, "null"]}
+        previous_state: {type: [string, "null"]}
+
+  - name: power_cycle_port
+    access: write
+    human_approval: true
+    description: >-
+      Cuts and restores the PoE power of one port of a switch, which reboots what hangs on it (an access
+      point, a camera, a phone). Refused when the port has no PoE. No undo.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, device_id, port_idx]
+      properties:
+        site_id: {type: string}
+        device_id: {type: string}
+        port_idx: {type: integer}
+    output:
+      type: object
+      required: [site_id, action, target]
+      properties:
+        site_id: {type: string}
+        action: {type: string}
+        target: {type: string, description: The device id and port.}
+        target_name: {type: [string, "null"]}
+        previous_state: {type: [string, "null"]}
+
+  - name: block_client
+    access: write
+    human_approval: true
+    description: Cuts a client off the network. `unblock_client` undoes it.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, client_id]
+      properties:
+        site_id: {type: string}
+        client_id: {type: string}
+    output: {$ref: "#/$defs/client_block"}
+
+  - name: unblock_client
+    access: write
+    human_approval: false
+    description: Lets a blocked client back on. `block_client` undoes it.
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, client_id]
+      properties:
+        site_id: {type: string}
+        client_id: {type: string}
+    output: {$ref: "#/$defs/client_block"}
+
+  - name: upgrade_firmware
+    access: write
+    human_approval: true
+    description: >-
+      Upgrades a device to the firmware the provider offers it; the device restarts. No undo (a provider's
+      downgrade is its own procedure).
+    input:
+      type: object
+      additionalProperties: false
+      required: [site_id, device_id]
+      properties:
+        site_id: {type: string}
+        device_id: {type: string}
+    output:
+      type: object
+      required: [site_id, device_id, accepted]
+      properties:
+        site_id: {type: string}
+        device_id: {type: string}
+        accepted: {type: boolean}
+
+$defs:
+  provider:
+    type: object
+    required: [instance, provider, sites, unsupported_tools]
+    properties:
+      instance: {type: string, description: The name of this instance of the server (its connector name).}
+      provider: {type: string, description: "The provider, the vendor or product family behind the instance."}
+      sites: {type: array, items: {$ref: "#/$defs/site"}}
+      unsupported_tools:
+        type: array
+        items: {type: string}
+        description: Profile tools this server answers `not_supported`; an agent does not propose them.
+  site:
+    type: object
+    required: [id, name]
+    properties:
+      id: {type: string}
+      name: {type: string}
+  device:
+    type: object
+    required: [id, name, model, state]
+    properties:
+      id: {type: string}
+      name: {type: string}
+      model: {type: string}
+      state: {type: string}
+      firmware_version: {type: [string, "null"]}
+  client:
+    type: object
+    required: [id, name, type]
+    properties:
+      id: {type: string}
+      name: {type: string}
+      type: {type: string}
+      uplink_device_id: {type: [string, "null"]}
+  client_block:
+    type: object
+    required: [site_id, client_id, blocked]
+    properties:
+      site_id: {type: string}
+      client_id: {type: string}
+      blocked: {type: boolean}

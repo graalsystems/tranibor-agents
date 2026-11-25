@@ -1,0 +1,159 @@
+# SPDX-License-Identifier: Apache-2.0
+# The UniFi server of the `lan` profile, as the platform runs and governs it (ADR 0094, ADR 0224).
+# Source: ../server. It speaks the official UniFi Network Integration API of a console, and the cloud Site
+# Manager API when its key is configured. A tool not listed in `operations` is refused by the platform.
+name: lan-unifi
+# The profile this server serves (declared by the `lan` plugin, which this plugin requires). The tools below
+# are the profile's, with at least its governance; the profile's conformance suite runs in ../server/tests.
+implements: [lan/lan@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/lan-unifi-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [base_url, api_key]
+  properties:
+    base_url:
+      type: string
+      title: Console URL
+      format: uri
+      pattern: "^https://"
+      description: The UniFi console (UniFi OS) the Integration API is served on, e.g. https://unifi.example.com, without a path.
+      x-env: UNIFI_BASE_URL
+      x-help: The address the platform reaches the console on over HTTPS. A console on a private network needs a way in the platform does not offer yet (see the plugin's README).
+      x-link: https://developer.ui.com/network/
+    api_key:
+      type: string
+      title: Integration API key
+      minLength: 16
+      description: The Integration API key created in UniFi Network, Settings, Control Plane, Integrations (sent as X-API-KEY).
+      x-env: UNIFI_API_KEY
+      x-help: Create it with a dedicated account whose role is read-only first; the key has the rights of that account. It is shown once.
+      x-link: https://developer.ui.com/network/
+    ca_certificate:
+      type: string
+      title: Console certificate (PEM)
+      description: >-
+        PEM of the certificate the console presents, or of the CA that signed it, when it is not publicly
+        trusted (the default of a console). It replaces the system store for this console; verification is
+        never switched off. Empty: the system store.
+      x-env: UNIFI_CA_CERTIFICATE
+      x-help: Export the certificate the console presents, or its CA's, as PEM. Never turn verification off.
+      x-link: https://developer.ui.com/network/
+    site_manager_url:
+      type: string
+      title: Site Manager URL
+      enum: ["https://api.ui.com"]
+      description: Set to https://api.ui.com, with site_manager_api_key, to enable the cloud firmware tool. Leave empty for local data only.
+      x-env: UNIFI_SITE_MANAGER_URL
+      x-help: "Optional. Goes with site_manager_api_key (both or neither)."
+      x-link: https://developer.ui.com/site-manager/
+    site_manager_api_key:
+      type: string
+      title: Site Manager API key
+      minLength: 16
+      description: A Site Manager API key (unifi.ui.com, API), read only. Optional.
+      x-env: UNIFI_SITE_MANAGER_API_KEY
+      x-help: Optional. It lists the hosts, sites and devices of the account; leave it out to keep every call local.
+      x-link: https://developer.ui.com/site-manager/
+secret_fields: [api_key, site_manager_api_key]
+
+# The only hosts the server may reach: the console, and the Site Manager when it is configured.
+egress:
+  from_fields: [base_url, site_manager_url]
+
+# The governance floor of the profile, kept or raised. `access: read` is allowed by default; a write goes
+# through approval unless an administrator decides otherwise; `human_approval: true` is never lowered.
+# `compensation` is the operation that undoes a write, its arguments rendered from the write's own result;
+# the platform renders every argument to a string.
+# `block_client`, `unblock_client` and `upgrade_firmware` are served for the profile but the official
+# Integration API has no such call: they answer `not_supported` and `get_provider` lists them. Their governance
+# is declared all the same, so that a future API change does not lower it.
+operations:
+  - {name: get_provider, access: read}
+  - {name: list_sites, access: read}
+  - {name: list_devices, access: read}
+  - {name: get_device, access: read}
+  - {name: get_device_statistics, access: read}
+  - {name: list_clients, access: read}
+  - {name: get_client, access: read}
+  - {name: list_networks, access: read}
+  - {name: list_wlans, access: read}
+  - {name: firmware_status, access: read}
+
+  - name: restart_device
+    access: write
+    human_approval: true
+    description: Restarts an adopted device; its clients, and whatever hangs on it, lose connection for minutes. No undo.
+  - name: power_cycle_port
+    access: write
+    human_approval: true
+    description: Cuts and restores the PoE power of one switch port. Refused when the port has no PoE. No undo.
+  - name: block_client
+    access: write
+    human_approval: true
+    description: Not supported by UniFi's official API (answers not_supported). Governed as the profile asks, with its undo.
+    compensation:
+      operation: unblock_client
+      arguments:
+        site_id: "{{ result.site_id }}"
+        client_id: "{{ result.client_id }}"
+  - name: unblock_client
+    access: write
+    description: Not supported by UniFi's official API (answers not_supported). Compensated by blocking the client again.
+    compensation:
+      operation: block_client
+      arguments:
+        site_id: "{{ result.site_id }}"
+        client_id: "{{ result.client_id }}"
+  - name: upgrade_firmware
+    access: write
+    human_approval: true
+    description: Not supported by UniFi's official API (answers not_supported). A real upgrade restarts the device. No undo.
+
+  # UniFi-only extras: agents of the `lan` profile never see them (an agent names profile tools).
+  - {name: get_info, access: read}
+  - {name: list_vouchers, access: read}
+  - {name: cloud_firmware_status, access: read}
+  - name: authorize_guest
+    access: write
+    human_approval: true
+    description: Authorises a guest client on the hotspot, with optional limits. Compensated by revoke_guest_access.
+    compensation:
+      operation: revoke_guest_access
+      arguments:
+        site_id: "{{ result.site_id }}"
+        client_id: "{{ result.client_id }}"
+  - name: unauthorize_guest
+    access: write
+    human_approval: true
+    description: Revokes a guest's authorisation and disconnects it.
+  - name: revoke_guest_access
+    access: write
+    description: The compensation of authorize_guest only.
+  - name: create_vouchers
+    access: write
+    human_approval: true
+    description: Creates hotspot vouchers (the only call that returns codes). Idempotent through the platform's action_key; compensated by revoke_vouchers.
+    platform_arguments: [action_key]
+    compensation:
+      operation: revoke_vouchers
+      arguments:
+        site_id: "{{ result.site_id }}"
+        voucher_name: "{{ result.voucher_name }}"
+  - name: revoke_vouchers
+    access: write
+    description: The compensation of create_vouchers only.
+
+# The platform runs an eval instance of the image with exactly these variables (core #1372): the seeded
+# fake site, no network, nothing of the configuration.
+fake:
+  env: {LAN_UNIFI_FAKE: "1"}
+  scenes: [default]

@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `lan` plugin (ADR 0224): the LAN profile (what any network vendor's server must serve), the
+# vendor-neutral agent `lan-steward`, its skill, the `lan-incident` template and the evals. It brings no
+# server: a provider plugin (`lan-unifi`, a future `lan-omada`, `lan-meraki`, ...) brings one that
+# `implements: [lan/lan@1]`.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: lan
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Diagnose a site's local network under human approval: an agent reads devices, clients, VLANs, Wi-Fi and
+    firmware state, explains "what is wrong on site X" with the evidence for each claim, and proposes governed
+    changes (restart a device, power-cycle a PoE port, block or unblock a client, upgrade a firmware) that a
+    network administrator approves before anything is written. The agent names no vendor: it works with
+    whichever LAN server plugins the organisation installed.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `contents.profiles` and `mcp_servers[].profile` arrive with the core stories S86-01/S86-02. The first core
+  # release that carries them is not known yet: this floor is a placeholder to set to that release.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  profiles: [profiles/lan.yaml]
+  agents: [agents/lan-steward.yaml]
+  skills: [skills/lan-troubleshooting]
+  templates: [templates/lan-incident]
+  evals: [evals/lan-steward.yaml]

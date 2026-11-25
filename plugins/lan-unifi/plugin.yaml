@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# The UniFi server of the `lan` profile (ADR 0224): it serves lan/lan@1 for a UniFi console through its
+# official Network Integration API (and the cloud Site Manager API when configured), and the procedure an
+# administrator follows to create a key on the console. The agent, skill, template and evals live in the
+# `lan` plugin, which this one requires.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: lan-unifi
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Serve a UniFi network to the `lan` plugin's agent: sites, devices, statistics, clients, VLANs, Wi-Fi and
+    firmware state, with a device restart and a PoE power-cycle as approved writes. UniFi's official API has no
+    call to block a client or upgrade a firmware: those profile tools answer not_supported and say so.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # Profiles (`implements`) arrive with the core stories S86-01/S86-02; the first core release that carries
+  # them is not known yet, so this floor is a placeholder to be set to that release. The `lan` plugin says the same.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: [lan]
+  connectors: {}
+contents:
+  procedures: ["procedures/*.md"]
+  servers: [servers/lan-unifi.yaml]

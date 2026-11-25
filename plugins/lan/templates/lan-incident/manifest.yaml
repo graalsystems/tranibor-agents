@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: lan-incident
+  version: 0.1.0
+  display: LAN · incident under review
+  description: >-
+    A complaint about a site's network — slow Wi-Fi in a room, a device offline, a client that cannot
+    connect — becomes a work item. The LAN steward finds the instance that serves the site, reads it and
+    writes a diagnosis with a change plan; a network administrator reviews it and decides each proposed
+    action. Nothing is written to the network before a person approves it.
+requires:
+  connectors: {}
+defaults:
+  workflows: [./workflows/lan-incident.yaml]
+  default_workflow: lan-incident
+  policy: preset:solo
+  # The agent `lan-steward` and the skill `lan-troubleshooting` come with the plugin itself. The template
+  # names no connector: the site's provider is whichever LAN server plugin the organisation installed, and
+  # the agent finds the instance that serves the site.
+inputs: []
+steps: []

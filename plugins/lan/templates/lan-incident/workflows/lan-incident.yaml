@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: Apache-2.0
+# A LAN incident: request → diagnosis (agent) → review (network administrator) → done.
+#
+# - The steward finds the instance that serves the site, reads it and writes a diagnosis. Any write it calls
+#   (restart, PoE power-cycle, block or unblock, firmware upgrade) is a governed action waiting in Approvals:
+#   nothing reaches the network from the run itself. Each of those but `unblock_client` always needs a person.
+# - The network administrator reads the diagnosis and decides each proposed action in Approvals: an approved
+#   action is applied by the provider's server. The administrator confirms below when the incident is handled.
+#   Rejecting sends the request back to the queue.
+# - There is no platform step that writes: the workflow cannot name a connector, since the provider is
+#   whichever instance the organisation connected.
+# - A failed diagnosis goes back to the queue untouched: the steward writes nothing on failure.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: lan-incident
+  version: 1
+  description: A network complaint diagnosed by an agent, then reviewed by a network administrator who decides each proposed action through approvals.
+  inputs:
+    type: object
+    properties:
+      site: { type: string, title: Site (optional), maxLength: 200, description: The site the complaint is about, by name or id }
+initial: queue
+actors:
+  steward: { type: agent, role: diagnose, agent: lan-steward, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  network_admin: { type: human, group: network-admin, sla_hours: 8 }
+states:
+  queue: { display: Incident received, kind: wait }
+  awaiting_review: { display: Diagnosis to review, kind: wait }
+  done: { display: Handled, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the network administrators, terminal: true, outcome: cancelled }
+transitions:
+  - id: t-diagnose
+    from: queue
+    to: awaiting_review
+    by: steward
+    outputs: [lan_diagnosis_markdown, action_kind]
+    output_types: { lan_diagnosis_markdown: markdown }
+    gates:
+      - outputs_present
+      - name: outputs_in
+        params: { values: { action_kind: [none, restart_device, power_cycle_port, block_client, unblock_client, upgrade_firmware] } }
+    on_fail: { to: queue, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-review
+    from: awaiting_review
+    to: done
+    by: network_admin
+    task:
+      title: Review the diagnosis and decide its actions
+      instructions: >-
+        Read the diagnosis: which instance serves the site, what the network shows, the likely cause, the
+        actions proposed and the change plan. Decide each proposed action in Approvals; an approved action is
+        applied by the provider. Make the changes of the change plan on the vendor's console yourself if you
+        agree. Confirm below when the incident is handled. Reject to send the request back to the queue.
+      form:
+        type: object
+        properties:
+          note: { type: string, title: What you did or decided, maxLength: 2000 }
+      attest: I reviewed the diagnosis and decided its actions
+    on_reject: queue
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: network_admin
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

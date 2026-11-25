@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: access-review
+  version: 0.1.0
+  display: Keycloak · periodic access review under approval
+  description: >-
+    A review of the realm's access becomes a work item. The IAM steward reads the realm (dormant accounts,
+    users outside any group, oversized groups, suspicious admin events) and writes a report with the
+    evidence; the realm's owners read it and decide. Every change it proposes (a group membership, a
+    disabled account) waits in Approvals for a person; nothing reaches Keycloak before.
+requires:
+  connectors:
+    tracker: internal
+  # The organisation connector the plugin's install creates for its server `keycloak`, by name, and its
+  # capability (as the ServiceNow template names its own).
+  org_connectors:
+    keycloak: mcp
+defaults:
+  workflows: [./workflows/access-review.yaml]
+  default_workflow: access-review
+  policy: preset:solo
+  # The agent `iam-steward` and the skill `keycloak-access-review` come with the plugin itself.
+inputs: []
+steps: []

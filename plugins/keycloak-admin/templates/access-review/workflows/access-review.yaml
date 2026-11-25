@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: Apache-2.0
+# A periodic access review under approval: review (agent) → decision (realm owners) → done.
+#
+# - The steward only reads, and proposes. Any write it calls (remove from a group, disable, end sessions,
+#   email a user) is a governed action waiting in Approvals; nothing reaches Keycloak from the run itself.
+# - The owners read the report, settle the proposals waiting in Approvals, and record that the review is
+#   done and what was decided. Rejecting sends the review back to be run again.
+# - A failed review goes back untouched: the steward writes nothing on failure.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: access-review
+  version: 1
+  description: A Keycloak realm's access reviewed by an agent, and decided by the realm's owners.
+  inputs:
+    type: object
+    properties:
+      scope: { type: string, title: What to review (a group, an application, or the whole realm), maxLength: 500 }
+      window_days: { type: integer, title: Dormancy window in days, minimum: 7, maximum: 730 }
+      outcome: { type: string, title: Decision, enum: [no_change, changes_approved, follow_up_needed] }
+      owners_note: { type: string, title: Owners' note, maxLength: 4000 }
+initial: queue
+actors:
+  steward: { type: agent, role: access_review, agent: iam-steward, model: "profile:standard", max_turns: 40, max_minutes: 20 }
+  owners: { type: human, group: iam-owners, sla_hours: 72 }
+states:
+  queue: { display: To review, kind: wait }
+  awaiting_decision: { display: Review to decide, kind: wait }
+  done: { display: Review closed, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the owners, terminal: true }
+transitions:
+  - id: t-review
+    from: queue
+    to: awaiting_decision
+    by: steward
+    outputs: [access_review_markdown]
+    output_types: { access_review_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: queue, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-decide
+    from: awaiting_decision
+    to: done
+    by: owners
+    task:
+      title: Decide on the access review
+      instructions: >-
+        Read the report. Decide the proposals waiting in Approvals (group memberships, disabled accounts,
+        ended sessions, emails). Then record the outcome and a note of what you decided and what you leave
+        for later. Reject to send the review back to be run again.
+      form:
+        type: object
+        required: [outcome, owners_note]
+        properties:
+          outcome: { type: string, title: Decision, enum: [no_change, changes_approved, follow_up_needed] }
+          owners_note: { type: string, title: Owners' note, minLength: 1, maxLength: 4000 }
+      attest: I read the review and decided on every proposal it made
+    on_reject: queue
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: owners
+    timeout_hours: 168
+artifacts:
+  access_review_markdown: { show: tab, title: Access review }
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

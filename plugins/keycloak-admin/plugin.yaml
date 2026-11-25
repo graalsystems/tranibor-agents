@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Keycloak administration plugin (ADR 0093): an agent that reviews who has access to what in a realm
+# and proposes access changes under human approval, the MCP server it reads and writes through, the
+# skill that carries the least-privilege and pre-upgrade checklist, the periodic access-review template,
+# and the procedure an administrator follows on the Keycloak server.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: keycloak-admin
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Review access in a Keycloak realm under human approval: an agent finds who has access to what, dormant
+    accounts, users outside any group, oversized groups and suspicious admin events, and proposes access
+    changes with evidence that a person approves before anything is written. Never deletes a user, reads a
+    credential or touches a client secret.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # The agent declares its five components (ADR 0127, first in core 0.25.1) and the template ships its
+  # start rule, `defaults.start_rules`, which a core before 0.29.2 refuses (as servicenow's does).
+  core: ">=0.29.2,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  agents: [agents/iam-steward.yaml]
+  skills: [skills/keycloak-access-review]
+  templates: [templates/access-review]
+  evals: [evals/iam-steward.yaml]
+  procedures: ["procedures/*.md"]
+  servers: [servers/keycloak-admin.yaml]

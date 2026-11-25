@@ -30,7 +30,7 @@ def descriptor() -> dict[str, Any]:
 def test_the_descriptor_implements_the_profile_and_the_plugin_requires_it() -> None:
     assert descriptor()["implements"] == ["dns/dns@1"]
     plugin = yaml.safe_load((ROOT / "plugin.yaml").read_text())
-    assert plugin["requires"]["plugins"] == ["dns"]
+    assert [p["name"] for p in plugin["requires"]["plugins"]] == ["dns"]
 
 
 def test_the_rest_of_the_descriptor() -> None:

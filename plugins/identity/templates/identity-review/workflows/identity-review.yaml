@@ -3,8 +3,8 @@
 #
 # - The steward finds the instance that serves the directory, reads it and writes a report. Any write it
 #   calls (disable, enable, sign out, setup mail, membership) is a governed action waiting in Approvals:
-#   nothing reaches the directory from the run itself. `disable_user`, `enable_user`, `logout_user` and
-#   `send_setup_email` always need a person; the memberships follow the project's policy.
+#   nothing reaches the directory from the run itself. `add_user_to_group`, `disable_user`, `enable_user`,
+#   `logout_user` and `send_setup_email` always need a person; `remove_user_from_group` follows the project's policy.
 # - The owner reads the report and decides each proposed action in Approvals, then confirms below. Rejecting
 #   sends the request back to the queue.
 # - The workflow cannot name a connector, since the provider is whichever instance the organisation connected.

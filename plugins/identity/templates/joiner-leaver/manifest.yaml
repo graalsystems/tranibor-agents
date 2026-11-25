@@ -8,8 +8,9 @@ metadata:
   description: >-
     A request to onboard or offboard a person becomes a work item. The joiner-leaver agent reads the role
     catalogue and the directory and proposes the ordered writes (create, groups, setup mail; or disable, sign
-    out, ungroup); IT identity reviews the plan and decides each proposed action. Nothing is written to a
-    directory, and nothing is deleted, before a person approves it.
+    out, ungroup); the person's manager approves the plan, IT identity decides each proposed action, and the
+    agent reads the directory back. Nothing is written to a directory, and nothing is deleted, before a person
+    approves it.
 requires:
   connectors: {}
 defaults:

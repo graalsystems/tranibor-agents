@@ -12,8 +12,8 @@ provider whose server plugin is installed, and a person to decide what is change
 
 Things to know:
 
-- **Nothing is written before a person decides.** `disable_user`, `enable_user`, `logout_user` and
-  `send_setup_email` are `human_approval: true` in the profile; a server may only raise that, never lower it.
+- **Nothing is written before a person decides.** `add_user_to_group`, `disable_user`, `enable_user`, `logout_user`
+  and `send_setup_email` are `human_approval: true` in the profile; a server may only raise that, never lower it.
 - **Findings are candidates.** The agent says what the directory shows and what it cannot know (a service
   account, a second factor enforced elsewhere); the owner asks the person's manager.
 - **The template names no connector.** The provider is whichever instance of `identity/identity@1` the

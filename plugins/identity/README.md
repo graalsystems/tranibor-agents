@@ -37,7 +37,8 @@ organisation's instances `<instance>__<tool>`.
 | `list_sign_in_events`, `list_admin_events` | read | none; never returns a secret or a representation |
 | `plan_joiner`, `plan_leaver` | read | none; compute the ordered calls and their warnings, write nothing |
 | `create_user` | write | `human_approval`; idempotent on the username and through the platform's `action_key`; sets no password |
-| `add_user_to_group`, `remove_user_from_group` | write | idempotent; compensated by the opposite call |
+| `add_user_to_group` | write | `human_approval` (a group can be privileged); idempotent; compensated by `remove_user_from_group` |
+| `remove_user_from_group` | write | none at the floor; idempotent; compensated by `add_user_to_group` |
 | `disable_user`, `enable_user` | write | `human_approval`; idempotent; compensated by each other |
 | `logout_user` | write | `human_approval`; ends the open sessions |
 | `send_setup_email` | write | `human_approval`; through the platform's `action_key` |

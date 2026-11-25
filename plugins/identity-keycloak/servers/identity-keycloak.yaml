@@ -105,7 +105,8 @@ operations:
     platform_arguments: [action_key]
   - name: add_user_to_group
     access: write
-    description: A group membership, idempotent. Undone by removing it (check `changed`; a no-op add must not be undone).
+    human_approval: true
+    description: A group membership, idempotent; it grants access (a group can be privileged), so a person approves it. Undone by removing it (check `changed`; a no-op add must not be undone).
     compensation:
       operation: remove_user_from_group
       arguments:

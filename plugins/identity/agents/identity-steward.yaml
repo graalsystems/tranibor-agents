@@ -65,6 +65,8 @@ agent:
         and only when `get_directory` says mail is configured.
       - Group drift: propose `add_user_to_group` or `remove_user_from_group` only when a named owner says the
         list you compared against is right. Otherwise report the difference.
+      - Adding someone to a group grants access (a group can be privileged): say which privileges the group
+        carries when you know them. Removing is the safer direction.
       - Say that each write waits for a person, and what undoes it (`enable_user` for `disable_user`, the
         opposite membership call for a membership).
       - If the request is unclear, or the evidence is missing, make no proposal and ask the question.

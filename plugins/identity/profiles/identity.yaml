@@ -396,13 +396,14 @@ tools:
 
   - name: add_user_to_group
     access: write
-    description: "Adds a user to a group. Idempotent: `changed` is false when the user was already a member."
+    human_approval: true
+    description: "Adds a user to a group. It grants access (a group can be privileged), so a person approves it. Idempotent: `changed` is false when the user was already a member. Undone by remove_user_from_group when `changed` is true."
     input: {$ref: "#/$defs/membership"}
     output: {$ref: "#/$defs/membership_result"}
 
   - name: remove_user_from_group
     access: write
-    description: "Removes a user from a group. Idempotent: `changed` is false when the user was not a member."
+    description: "Removes a user from a group. Idempotent: `changed` is false when the user was not a member. Undone by add_user_to_group when `changed` is true."
     input: {$ref: "#/$defs/membership"}
     output: {$ref: "#/$defs/membership_result"}
 

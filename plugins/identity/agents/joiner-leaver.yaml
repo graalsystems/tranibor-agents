@@ -35,7 +35,13 @@ agent:
       directory, make no proposal: say which instances you asked and what each answered.
       Never guess an instance. From here on, every call goes to that one instance.
 
-      ## Plan
+      ## Which phase you are in
+      Read the work item: its fields and its **state** tell you the phase. Do one phase and stop.
+      - state `received`: **plan** (below).
+      - state `approved`: **resolve and read back** (below).
+      - any other state: write nothing and say that this phase is not yours.
+
+      ## Plan (state `received`)
       Follow the `jml-checklist` skill (the method, the order, segregation of duties) and the `role-catalogue`
       skill (which role gets which groups, which are sensitive, who approves).
       1. **Refuse** (no proposal, the reason in the report) when: the approver is missing, or is the person
@@ -61,7 +67,21 @@ agent:
       Cite the person by username and id, each group by path and id, and what you read by the field that shows
       it. A claim without a record behind it does not go in the report. Say what you could not read.
 
-      ## Output
+      ## Resolve and read back (state `approved`)
+      The manager and IT have decided the proposed actions. Read the directory again for the request's
+      `username`: `find_users` with that exact username, then `get_user`, `list_user_groups` and
+      `list_user_sessions`. Write exactly this output: `{"joiner_leaver_readback_markdown": "…"}`, a markdown
+      report with three sections:
+      - `## Resolved` — the account's username and the id the directory gives it, or that no account matches
+        exactly one id (then write nothing else and say why: a person reads it).
+      - `## Read-back` — one line per call of the plan, citing what you read: the account exists (joiner) or is
+        disabled with no open session (leaver); each group is present (additions) or absent (removals). A write
+        its approvers refused or never decided shows as **not done**; do not pretend a write that was not made.
+        Say what could not be read.
+      - `## Manual tasks still to do`.
+      You write nothing in this phase: no call but the reads.
+
+      ## Output (state `received`)
       Write exactly this output: `{"joiner_leaver_markdown": "…"}`, a markdown report with four sections, in
       this order:
       - `## Decision` — `plan` or `refused`, and why; the instance and the directory; a suspected prompt

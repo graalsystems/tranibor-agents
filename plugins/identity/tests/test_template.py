@@ -106,12 +106,14 @@ def test_an_agent_can_only_write_what_a_person_approves(agent: str) -> None:
     # The writes that touch the person are never applied without a decision.
     for name in (
         "create_user",
+        "add_user_to_group",
         "disable_user",
         "enable_user",
         "logout_user",
         "send_setup_email",
     ):
         assert tools[name]["human_approval"] is True
+    assert not tools["remove_user_from_group"].get("human_approval")
 
 
 @pytest.mark.parametrize("agent", sorted(AGENTS))
@@ -141,12 +143,33 @@ def test_the_evals_hold_against_the_instructions(agent: str) -> None:
 def test_the_workflow_hands_the_output_to_a_person(agent: str) -> None:
     workflow = _load(PLUGIN / "templates" / AGENTS[agent] / "workflows" / f"{AGENTS[agent]}.yaml")
     assert all("action" not in transition for transition in workflow["transitions"])
-    first, second = workflow["transitions"][:2]
-    assert (first["from"], first["to"]) == (workflow["initial"], "awaiting_review")
-    assert second["from"] == "awaiting_review" and second["to"] == "done" and "task" in second
+    steps = {t["id"]: t for t in workflow["transitions"]}
+    first = workflow["transitions"][0]
+    assert first["from"] == workflow["initial"] and first["by"] == next(
+        name for name, actor in workflow["actors"].items() if actor["type"] == "agent"
+    )
     assert first["outputs"] == [OUTPUT_KEYS[agent]]
+    assert first["to"] in workflow["states"] and "task" in workflow["transitions"][1]
     manifest = _load(PLUGIN / "templates" / AGENTS[agent] / "manifest.yaml")
     assert manifest["requires"]["connectors"] == {}
     assert "org_connectors" not in manifest["requires"]
-    actors = {name: actor for name, actor in workflow["actors"].items() if actor["type"] == "agent"}
-    assert [actor["agent"] for actor in actors.values()] == [agent]
+    actors = [actor["agent"] for actor in workflow["actors"].values() if actor["type"] == "agent"]
+    assert actors == [agent]
+    assert steps  # every transition is reachable by id
+
+
+def test_a_joiner_or_leaver_is_approved_by_the_manager_then_decided_then_read_back() -> None:
+    workflow = _load(PLUGIN / "templates" / "joiner-leaver" / "workflows" / "joiner-leaver.yaml")
+    chain = [(t["from"], t["to"], t["by"]) for t in workflow["transitions"] if t["id"] != "t-abandon"]
+    assert chain == [
+        ("received", "planned", "agent"),
+        ("planned", "manager_ok", "manager"),
+        ("manager_ok", "approved", "it_identity"),
+        ("approved", "checked", "agent"),
+        ("checked", "done", "it_identity"),
+    ]
+    steps = {t["id"]: t for t in workflow["transitions"]}
+    assert steps["t-manager"]["on_reject"] == "declined"
+    assert steps["t-readback"]["outputs"] == ["joiner_leaver_readback_markdown"]
+    text = _spec("joiner-leaver")["instructions"]
+    assert "state `received`" in text and "state `approved`" in text and "joiner_leaver_readback_markdown" in text

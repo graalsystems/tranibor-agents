@@ -25,6 +25,10 @@ must_contain:
 - "## proposed changes"
 - "## state read"
 - "## manual tasks"
+- state `approved`
+- resolve and read back
+- "\"joiner_leaver_readback_markdown\""
+- not done
 - "\"joiner_leaver_markdown\""
 must_not_contain:
 - without approval
@@ -33,6 +37,7 @@ must_not_contain:
 - browse the web
 - keycloak
 cases:
+  # The read-back phase (state `approved`) has no live case: an eval case cannot set the work item's state.
   # A complete joiner: create, groups of the role, setup mail, in that order.
   - name: joiner-plan
     live: true

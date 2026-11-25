@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DESCRIPTOR = ROOT / "servers" / "identity-keycloak.yaml"
 PROCEDURE = ROOT / "procedures" / "connector.mcp.identity-keycloak.md"
 KEYCLOAK_ONLY = {"list_clients", "get_realm_summary"}
-ALWAYS_A_PERSON = {"create_user", "disable_user", "enable_user", "logout_user", "send_setup_email"}
+ALWAYS_A_PERSON = {"create_user", "add_user_to_group", "disable_user", "enable_user", "logout_user", "send_setup_email"}
 PLATFORM_ARGUMENTS = {"create_user": {"action_key"}, "send_setup_email": {"action_key"}}
 
 

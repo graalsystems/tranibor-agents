@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: dns-change
+  version: 0.1.0
+  display: DNS · change under review
+  description: >-
+    A request to change a DNS name becomes a work item. The DNS steward finds the instance that serves the
+    zone, reads it and writes a plan with TTL advice and a rollback; the zone owner reviews and decides each
+    proposed action. Nothing is written to a zone, and nothing is published, before a person approves it.
+requires:
+  connectors: {}
+defaults:
+  workflows: [./workflows/dns-change.yaml]
+  default_workflow: dns-change
+  policy: preset:solo
+  # The agent `dns-steward` and the skill `dns-change-hygiene` come with the plugin itself. The template names
+  # no connector: the zone's provider is whichever DNS server plugin the organisation installed, and the
+  # agent finds the instance that serves the zone.
+inputs: []
+steps: []

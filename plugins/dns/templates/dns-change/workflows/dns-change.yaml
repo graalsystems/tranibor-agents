@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: Apache-2.0
+# A DNS change under review: request → plan (agent) → review (zone owner) → done.
+#
+# - The steward finds the instance that serves the zone, reads it and writes a plan. Any write it calls
+#   (create, update, delete, publish) is a governed action waiting in Approvals: nothing reaches the provider
+#   from the run itself. `delete_record` and `publish` always need a person; the others follow the project's
+#   policy.
+# - The zone owner reads the plan and decides each proposed action in Approvals: an approved action is
+#   written to the zone, and `publish` (only for providers that hold changes until published) makes them
+#   public. The owner confirms below when the change is complete. Rejecting sends the request back to the
+#   queue.
+# - There is no platform step that publishes: the workflow cannot name a connector, since the provider is
+#   whichever instance the organisation connected. The publish is the agent's last proposed action.
+# - A failed plan goes back to the queue untouched: the steward writes nothing on failure.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: dns-change
+  version: 1
+  description: A DNS change planned by an agent, then reviewed, applied and published by the zone owner through approvals.
+  inputs:
+    type: object
+    required: [zone]
+    properties:
+      zone: { type: string, title: Zone, pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", description: The zone to change, e.g. example.com }
+initial: queue
+actors:
+  steward: { type: agent, role: plan, agent: dns-steward, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  zone_owner: { type: human, group: zone-owners, sla_hours: 8 }
+states:
+  queue: { display: Requested, kind: wait }
+  awaiting_review: { display: Plan to review, kind: wait }
+  done: { display: Done, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Dropped, terminal: true, outcome: cancelled }
+transitions:
+  - id: t-plan
+    from: queue
+    to: awaiting_review
+    by: steward
+    outputs: [dns_steward_markdown]
+    output_types: { dns_steward_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: queue, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-review
+    from: awaiting_review
+    to: done
+    by: zone_owner
+    task:
+      title: Review the plan, apply and publish the changes
+      instructions: >-
+        Read the plan: which instance serves the zone, the records it changes, their previous values (the
+        rollback), the TTL advice and its warnings. Decide each proposed action in Approvals; an approved
+        action is written to the zone. When the provider stages changes, approve the publish last. Confirm
+        below when the change you wanted is in place. Reject to send the request back to the queue.
+      form:
+        type: object
+        required: [zone]
+        properties:
+          zone: { type: string, title: Zone changed, description: The zone you reviewed and decided }
+      attest: I reviewed the plan and decided its actions
+    on_reject: queue
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: zone_owner
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

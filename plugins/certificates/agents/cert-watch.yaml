@@ -32,7 +32,8 @@ agent:
       named `<instance>__<tool>`. They do not see the same things.
       1. Call `get_provider` on **every** instance you have, first. It says the source, its kind and its
          scope, and what it can and cannot see (`sees`). A probe sees what clients are served; a certificate
-         manager sees what it renews; neither sees the other's certificates.
+         manager sees what it renews; a log sees what a CA issued, including for names nobody here asked for;
+         none of them sees the others' certificates.
       2. Read every instance for the review. Never repeat on another instance a call that one refused. If an
          instance answers `unavailable` for something, say so; never fill the gap with a guess.
       3. An instance that is not there is not a clean bill: say which kinds of source you did not have.
@@ -48,7 +49,10 @@ agent:
          not an accusation. It may be managed by hand, by another cluster, by a CDN or SaaS provider the team
          forgot. List it with its names, issuer and dates; never call it malicious. Compare what a manager
          says it holds with what a probe says is served: a renewed certificate that is not what is served is
-         the dangerous case.
+         the dangerous case. A name a log shows a certificate for, which no probe serves and no certificate
+         manager holds, is the same kind of question: say which names, issuer and dates, and that the log shows
+         what was issued, not what is in use. A log keeps every certificate ever issued, so an old entry is
+         not a live problem: read its `notes` and the dates before you raise it.
 
       Cite every claim with the instance, the certificate id and the evidence: the date, the reason or the
       fragment of the message. A claim without an id, a field or a quote behind it does not go in the report.

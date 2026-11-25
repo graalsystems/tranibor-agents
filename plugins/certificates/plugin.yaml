@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The `certificates` plugin (ADR 0224): the certificates profile (what any certificate source's server must
 # serve), the provider-neutral agent `cert-watch`, its skill, the `cert-review` template and the evals. It
-# brings no server: a provider plugin (`certificates-probe`, `certificates-cert-manager`, ...) brings one that `implements: [certificates/certificates@1]`.
+# brings no server: a provider plugin (`certificates-probe`, `certificates-cert-manager`, `certificates-ct`, ...) brings one that `implements: [certificates/certificates@1]`.
 apiVersion: choregos/v1
 kind: Plugin
 metadata:
@@ -11,7 +11,7 @@ metadata:
   license: Apache-2.0
   description: >-
     Watch the TLS certificates an organisation depends on: an agent reads every certificate source the
-    organisation installed (live endpoints, a certificate manager), finds what
+    organisation installed (live endpoints, a certificate manager, a transparency log), finds what
     expires or is broken soon with the evidence, and proposes the renewal through whatever manages the
     certificate; a person reads the report. Read-only in this version: no server of the profile writes. The
     agent names no provider.

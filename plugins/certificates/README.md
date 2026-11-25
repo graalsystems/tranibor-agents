@@ -5,7 +5,8 @@ broken, why a renewal is stuck, and which certificates nobody manages. This plug
 on the source of the certificates: the **profile** every certificates server must serve, the agent, the skill,
 the template, the evals and the conformance suite. A provider plugin brings the server:
 [`certificates-probe`](../certificates-probe/README.md) (what endpoints serve),
-[`certificates-cert-manager`](../certificates-cert-manager/README.md) (what cert-manager renews in a cluster).
+[`certificates-cert-manager`](../certificates-cert-manager/README.md) (what cert-manager renews in a cluster),
+[`certificates-ct`](../certificates-ct/README.md) (what the public CAs logged for your domains).
 
 **Read-only in this version.** No tool of the profile writes: the agent proposes every fix as text for a
 person to apply, and no server of the profile declares a write operation.
@@ -29,7 +30,7 @@ instance first because the sources do not see the same things.
 
 | Tool | Access | What it answers |
 |:--|:--|:--|
-| `get_provider` | read | the source, its kind (`probe`, `manager`), its scope and what it can and cannot see |
+| `get_provider` | read | the source, its kind (`endpoint`, `manager`, `log`), its scope and what it can and cannot see |
 | `list_certificates` | read | the inventory, soonest expiry first; `within_days`, `name`, `limit`; what could not be read is in `unavailable` |
 | `get_certificate` | read | one certificate by id, with the renewal attempts and notes on what the source cannot tell |
 | `list_findings` | read | expired, expiring, renewal failing or overdue, not trusted, chain incomplete, name not covered, unreachable; each with its evidence |
@@ -39,9 +40,9 @@ and belongs to the source. A renewal is `{managed, manager, state}` with a state
 `failing` or `unknown`; a source that cannot see renewal says `managed: false, state: unknown`. A field a
 source does not know is omitted, never null.
 
-Left out on purpose: any write (issuing, renewing, revoking), Certificate Transparency search, private keys.
+Left out on purpose: any write (issuing, renewing, revoking), private keys.
 `expiry_report` of the earlier `cert-watch` plugin is replaced by `list_findings`; "undeclared certificate"
-detection is the agent's, across instances.
+detection is the agent's, across instances: a name the log shows that no probe serves and no manager holds.
 
 ## Conformance
 

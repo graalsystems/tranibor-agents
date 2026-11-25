@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Certificate Transparency server of the `certificates` profile, as the platform runs and governs it
+# (ADR 0094, ADR 0224). READ-ONLY: it searches a public log's index for the domains an administrator listed and
+# writes nothing anywhere. Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: certificates-ct
+# The profile this server serves (declared by the `certificates` plugin, which this plugin requires). The tools
+# below are the profile's, with its governance; the profile's conformance suite runs in ../server/tests.
+implements: [certificates/certificates@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/certificates-ct-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`. There is no secret: the log is public and answers anyone.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [domains]
+  properties:
+    domains:
+      title: Domains to follow
+      type: array
+      minItems: 1
+      items: {type: string}
+      description: >-
+        The domains whose publicly logged certificates to list, e.g. example.com (joined with commas). Their
+        subdomains are included. Any other domain is refused before a request is made.
+      x-env: CERTIFICATES_CT_DOMAINS
+      x-help: Every registered domain your organisation owns. A certificate for a name under one of them, issued by any public CA, appears in the log.
+      x-link: https://github.com/graalsystems/tranibor-agents/blob/main/plugins/certificates-ct/README.md#reaching-the-system
+    ct_url:
+      title: Search service
+      type: string
+      default: https://crt.sh
+      description: The Certificate Transparency search service to ask. Leave the default unless you run your own crt.sh-compatible mirror.
+      x-env: CERTIFICATES_CT_URL
+      x-help: Keep https://crt.sh. A mirror must answer crt.sh's JSON search (?q=%.example.com&output=json).
+      x-link: https://github.com/graalsystems/tranibor-agents/blob/main/plugins/certificates-ct/README.md#reaching-the-system
+
+# The only host this server contacts is the search service the administrator typed (default https://crt.sh): the
+# platform checks it against the organisation's network bounds (ADR 0224 section 6, README "Reaching the
+# system"). The domains are searched by name, they are not hosts.
+egress:
+  from_fields: [ct_url]
+
+# Everything this server does is a read; none needs approval and none has an undo.
+operations:
+  - {name: get_provider, access: read}
+  - {name: list_certificates, access: read}
+  - {name: get_certificate, access: read}
+  - {name: list_findings, access: read}
+
+# The platform runs an eval instance of the image with exactly these variables (core #1372): the seeded
+# search, no network, nothing of the configuration.
+fake:
+  env: {CERTIFICATES_CT_FAKE: "1"}
+  scenes: [default]

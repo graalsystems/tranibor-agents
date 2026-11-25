@@ -27,5 +27,5 @@ Things to know:
   ```
 
 - **Install a source first.** The review is only as good as what the sources can read: install at least one
-  certificates server plugin (`certificates-probe` for the endpoints, `certificates-cert-manager` for a
+  certificates server plugin (`certificates-probe` for the endpoints, `certificates-ct` for what the public CAs logged, `certificates-cert-manager` for a
   cluster) and give it what its procedure asks for. With none, the agent has nothing to read and says so.

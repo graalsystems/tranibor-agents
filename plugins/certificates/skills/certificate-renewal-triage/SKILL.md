@@ -73,9 +73,20 @@ A manager says what it believes; a probe says what clients get. Compare, across 
 - `unreachable`: nothing to compare; do not infer a certificate problem from it.
 - A probe's renewal is `managed: false, state: unknown`: it cannot see who renews, only what is served.
 
+## 5b. What a log adds
+
+A log (kind `log`) lists what any public CA issued for the domains it follows, whoever asked. It cannot see
+what is served or what renews a certificate (`renewal` is `managed: false, state: unknown`). Its use:
+
+- a name with a logged certificate that no probe serves and no manager holds: a lead (section 6).
+- an issuer the platform never uses, or a date no one remembers: ask the team that owns the name.
+- a renewed certificate leaves its predecessor in the log: an old entry with a later one covering the same
+  names is not a problem (the instance says so in the entry's `notes`).
+- an `expired` finding from a log is information: nobody may use that certificate any more.
+
 ## 6. A certificate nobody manages
 
-A served certificate that no manager reports is a lead, not a verdict: manual issuance, another cluster or
+A served or logged certificate that no manager reports is a lead, not a verdict: manual issuance, another cluster or
 team, a CDN or SaaS provider, a former owner, or a mis-issuance. An issuer the platform never uses and a
 recent date strengthen the case. Wildcards cover exactly one label: `*.example.com` covers `a.example.com`
 and not `a.b.example.com`.

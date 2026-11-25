@@ -2,7 +2,7 @@
 # The `certificates` profile, version 1 (ADR 0224): what an MCP server must serve to be "a source of TLS
 # certificates" for the `cert-watch` agent, whatever it looks at: live endpoints, a certificate manager, a
 # Certificate Transparency log. A provider's server (`certificates-probe`, `certificates-cert-manager`,
-# ...) declares `implements: [certificates/certificates@1]` and serves every tool below.
+# `certificates-ct`, ...) declares `implements: [certificates/certificates@1]` and serves every tool below.
 #
 # READ-ONLY, in this version. Every tool reads; no tool requests, renews, revokes or installs a certificate, and
 # a server of this profile declares no write operation. The agent proposes a renewal as text for a person to

@@ -4,10 +4,11 @@ The agents of the core's `default-request` workflow (ADR 0110), the one a projec
 
 | Agent | Catalogue version | What it does |
 |:--|--:|:--|
-| [`assistant`](agents/assistant.yaml) | 2 | Produces the deliverable an approved brief asks for, citing every fact it takes from a source, and checks it against the brief's acceptance criteria; needs no repository. |
-| [`brief-writer`](agents/brief-writer.yaml) | 2 | Turns a request from any trade into a one-page brief a person approves before anyone works on it; produces no deliverable and needs no repository. |
+| [`assistant`](agents/assistant.yaml) | 3 | Produces the deliverable an approved brief asks for, citing every fact it takes from a source, and checks it against the brief's acceptance criteria; needs no repository. |
+| [`brief-writer`](agents/brief-writer.yaml) | 3 | Turns a request from any trade into a one-page brief a person approves before anyone works on it; produces no deliverable and needs no repository. |
 
-Version 1.1.2, core `>=0.25.1,<1.0.0`; an older core keeps 1.0.1. The plugin's files do not hold the work-item context, which the core
+Version 1.1.3, core `>=0.25.1,<1.0.0`; an older core keeps 1.0.1. 1.1.3 names the knowledge bases where the core
+lays them: `.tranibor/knowledge/` from 0.30.0, `.choregos/knowledge/` before. The plugin's files do not hold the work-item context, which the core
 prepends when it installs an internal agent.
 
 
@@ -29,5 +30,5 @@ lessons go to the project's shared memory. A later version may narrow it.
 
 ```sh
 tranibor plugin validate plugins/requests
-tranibor plugin pack plugins/requests -o requests-1.1.2.tar.gz   # same bytes every time
+tranibor plugin pack plugins/requests -o requests-1.1.3.tar.gz   # same bytes every time
 ```

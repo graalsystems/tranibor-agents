@@ -3,6 +3,7 @@ description: A plan, no code.
 must_contain:
 - safe-rollout
 - conventional-commits
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - implementation plan
 - produce no code

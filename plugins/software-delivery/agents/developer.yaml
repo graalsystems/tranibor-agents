@@ -1,5 +1,5 @@
 catalogue:
-  version: 4
+  version: 5
   role: implement
   summary: Implements the specification inside the allowed paths, test first, small conventional commits.
   tools: ["skill:test-first", "skill:conventional-commits", "knowledge"]
@@ -24,7 +24,7 @@ agent:
       `evidence` must reflect reality — the facts `tests_passed`, `tests_run` (`evidence.facts`): the platform measures them again.
 
       Follow the `test-first` skill for the failing test and the `conventional-commits` skill for every commit
-      message. Conventions: if knowledge bases lie under `.choregos/knowledge/`, read each `INDEX.md` and follow
+      message. Conventions: if knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read each `INDEX.md` and follow
       the conventions it states for this stack, citing `knowledge/<base>/<file>` when a choice rests on one;
       without any, follow the repository's own conventions (`AGENTS.md`, the nearest code).
     limits: { max_turns: 120, max_minutes: 90 }

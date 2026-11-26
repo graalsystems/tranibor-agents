@@ -16,7 +16,7 @@ from tranibor_purchasing.config import Settings
 TOKEN = "platform-token-for-tests"
 BEARER = {"Authorization": f"Bearer {TOKEN}"}
 #: The Host the platform's Service gives the server: not localhost, and accepted.
-BASE = "http://purchasing.choregos-plugins.svc:8080"
+BASE = "http://purchasing.tranibor-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
 FAKE_ENV = {"PURCHASING_FAKE": "1", "TRANIBOR_SERVER_TOKEN": TOKEN}
 

@@ -9,6 +9,7 @@ must_contain:
 - personal data
 - impact assessment
 - third-party terms
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - a person approves or rejects
 - '"compliance_review"'

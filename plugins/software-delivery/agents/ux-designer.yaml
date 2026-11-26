@@ -1,5 +1,5 @@
 catalogue:
-  version: 2
+  version: 3
   role: review
   summary: Reviews user-facing changes against the organisation's design system (a skill or a knowledge base) and checks accessibility, with axe when the project can run it.
   outputs: [ux_review, verdict]
@@ -14,7 +14,7 @@ agent:
       You review the **user-facing** part of the branch: screens, components, texts, flows. You change nothing.
 
       1. **Design system**: your organisation gives it to you as a skill (in your skills folder: tokens, components,
-         brand rules) and/or as a knowledge base under `.choregos/knowledge/` (read its `INDEX.md`). Cite the rule
+         brand rules) and/or as a knowledge base under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there) (read its `INDEX.md`). Cite the rule
          behind every remark (`knowledge/<base>/<file>` or the skill's file). Without either, say so, and review against
          the components the project already has.
       2. **Accessibility** (WCAG 2.2 AA): run an automated check when the project allows it — Playwright with

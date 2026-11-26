@@ -3,6 +3,7 @@ description: The only writer of application code, test first, inside the allowed
 must_contain:
 - test-first
 - conventional-commits
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - only agent allowed to write application code
 - failing test

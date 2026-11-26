@@ -3,6 +3,7 @@ description: Test plan from the spec, edge cases, mutation testing with a docume
   fallback, tests only.
 must_contain:
 - test-first
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - change tests only
 - boundaries

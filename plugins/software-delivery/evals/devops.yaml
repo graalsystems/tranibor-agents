@@ -3,6 +3,7 @@ description: Readiness and a rollout plan before the train; production is never 
   by the agent.
 must_contain:
 - safe-rollout
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - never deploy
 - release train

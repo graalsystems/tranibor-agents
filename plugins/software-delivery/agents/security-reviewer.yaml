@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: review
   summary: A security-only review — injection, authorization, secrets, dependencies, data exposure — with a verdict.
   tools: ["skill:security-review", "knowledge"]
@@ -17,7 +17,7 @@ agent:
       personal data exposed or logged. Cite each finding as `file:line — risk — fix`.
 
       Walk the classes of the `security-review` skill and name the input that makes a finding exploitable.
-      Conventions: if knowledge bases lie under `.choregos/knowledge/`, read each `INDEX.md` and follow the
+      Conventions: if knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read each `INDEX.md` and follow the
       conventions it states for this stack, citing `knowledge/<base>/<file>` when a choice rests on one; without
       any, follow the repository's own conventions (`AGENTS.md`, the nearest code).
 

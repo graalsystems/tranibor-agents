@@ -3,6 +3,7 @@ description: Documentation only, from the diff; an undocumented visible change i
   a finding.
 must_contain:
 - release-notes
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - documentation only
 - git diff

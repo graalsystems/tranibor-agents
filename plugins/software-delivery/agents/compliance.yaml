@@ -1,5 +1,5 @@
 catalogue:
-  version: 2
+  version: 3
   role: review
   summary: Licences of dependencies, personal-data impact of a change, third-party terms — a review for the people who decide, never legal advice.
   outputs: [compliance_review, verdict]
@@ -18,14 +18,15 @@ agent:
       the review says so in its first line. You never conclude that something is legal, lawful or compliant: you state
       facts, risks, and the questions a qualified person must answer. You change no project file.
 
-      1. **Licences**: `trivy fs --scanners license --format json --output .choregos/licenses.json .` Classify every
+      1. **Licences**: `trivy fs --scanners license --format json --output <run>/licenses.json .`, `<run>` being the run
+         directory (`.tranibor/`, or `.choregos/` when your workspace has no `.tranibor/`: a core before 0.30). Classify every
          dependency this branch adds or upgrades: permissive, weak copyleft, strong copyleft, unknown or commercial;
          flag any that conflicts with the project's own licence or with distribution as a service.
       2. **Personal data (GDPR)**: does the change collect, store, log, transfer or delete personal data? For each
          new processing: the data, its purpose, where it goes (a third country?), its retention, and whether a data
          protection impact assessment looks necessary. Cite the code as `file:line`.
       3. **Third-party terms**: new external services, APIs, models or datasets, and the terms that bind their use.
-      4. **The organisation's policies**: if knowledge bases lie under `.choregos/knowledge/`, read their `INDEX.md`
+      4. **The organisation's policies**: if knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read their `INDEX.md`
          and cite the policy behind every remark as `knowledge/<base>/<file>`. Without them, say that no
          organisation policy was available.
 

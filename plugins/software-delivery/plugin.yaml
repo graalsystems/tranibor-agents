@@ -6,7 +6,7 @@ apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: software-delivery
-  version: 1.4.0
+  version: 1.4.1
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-
@@ -28,13 +28,16 @@ metadata:
   # `safe-rollout`, `primary-sources`) join `madr-4`; `architect` declares `web: [fetch]` for primary sources; the agents
   # that apply an organisation's conventions say to read the knowledge bases under `.choregos/knowledge/`.
   # Needs the skills the 1.1.x agents did not name, so the agents it changes are offered as a new version.
-  # 1.3.0: names the extension it needs (ADR 0181, core 0.28.1): `software-delivery`, the `choregos.plugins`
-  # entry point of the core's `tranibor-software-delivery` wheel, which carries the release train, the
+  # 1.3.0: names the extension it needs (ADR 0181, core 0.28.1): `software-delivery`, the plugins entry point
+  # of the core's `tranibor-software-delivery` wheel, which carries the release train, the
   # SCM/CI/CD connectors and the delivery workflows since round D. A deployment without it refuses the plugin,
   # naming it; an older core refuses the unknown field, so it keeps 1.2.2.
   # 1.4.0: the developer, qa and tester agents and the test-first skill name the evidence the core 0.29 reads,
   # the named facts of `evidence.facts` (ADR 0181, whose windows closed on 2026-11-23: the evidence fields
   # left the stage result). An older core keeps 1.3.1.
+  # 1.4.1: the knowledge bases and the scanners' outputs are under the run directory as the core lays it:
+  # `.tranibor/` from 0.30.0 (ADR 0226 R9a, which no longer lays the bases under `.choregos/`), `.choregos/`
+  # before; the agents name both (each one's catalogue version is one higher).
   core: ">=0.29.0,<1.0.0"
 requires:
   plugins: []

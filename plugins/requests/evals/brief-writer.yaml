@@ -4,6 +4,7 @@ must_contain:
 - expected deliverable
 - acceptance criteria
 - each one checkable
+- .tranibor/knowledge/
 - out of scope
 - you need no repository
 - ask_human

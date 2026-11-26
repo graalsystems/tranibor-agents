@@ -3,7 +3,7 @@
 matrix plays them, against this server in-process on its fake, and judged by the core's case judge.
 
 The matrix names a case `plugin:procurement-operations/<file stem>` and finds it in the offline plugins
-(`CHOREGOS_PLUGINS_OFFLINE`, here this repository's `plugins/`): what `plugin.yaml` declares is what it
+(`TRANIBOR_PLUGINS_OFFLINE`, here this repository's `plugins/`): what `plugin.yaml` declares is what it
 plays. The case's connector `plugin:procurement-operations/purchasing` is this server, which the core reaches as the
 broker does, over MCP with the platform's bearer token, on the fake registered for it in the process
 (`tranibor_adapters.fakes.plugin_servers.use_fake_plugin_server`). Registered here: the server's own app

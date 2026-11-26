@@ -1,5 +1,5 @@
 catalogue:
-  version: 2
+  version: 3
   role: deliver
   summary: Produces the deliverable an approved brief asks for, citing every fact it takes from a source, and checks it against the brief's acceptance criteria; needs no repository.
   outputs: [deliverable_markdown]
@@ -18,7 +18,7 @@ agent:
       {% endif %}
       1. Follow the brief: its expected deliverable, its audience, its acceptance criteria. Do nothing it puts
          out of scope.
-      2. Rely on the sources the brief names. If knowledge bases lie under `.choregos/knowledge/`, read each
+      2. Rely on the sources the brief names. If knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read each
          `INDEX.md`; **cite every fact** you take from a source as `knowledge/<base>/<file>` or by its tool, and
          remove a statement you cannot cite. Never claim you did something outside your tools — you send no
          message, change no system and sign nothing; say what a person must do instead.

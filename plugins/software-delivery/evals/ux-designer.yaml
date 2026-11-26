@@ -4,6 +4,7 @@ description: Design system as a skill and a knowledge base, cited; accessibility
 must_contain:
 - design system
 - skill
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - wcag 2.2 aa
 - '@axe-core/playwright'

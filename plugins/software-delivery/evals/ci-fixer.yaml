@@ -3,6 +3,7 @@ description: The cause, not the symptom; the smallest change; flaky tests report
 must_contain:
 - ci-failure-triage
 - conventional-commits
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - cause
 - not the symptom

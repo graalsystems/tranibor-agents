@@ -6,7 +6,7 @@ apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: requests
-  version: 1.1.2
+  version: 1.1.3
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-
@@ -21,6 +21,8 @@ metadata:
   # 1.1.0: every agent declares its five components (ADR 0127, S60-04): `model`, `tools.catalogue|extensions|web`,
   # `memories`. An older core refuses the spec fields it does not know, so it keeps the previous version; the
   # first core release with them (S60-01) is 0.25.1.
+  # 1.1.3: the knowledge bases are under `.tranibor/knowledge/` from core 0.30.0 (ADR 0226 R9a), under
+  # `.choregos/knowledge/` before: both agents name both (catalogue version 3).
   core: ">=0.25.1,<1.0.0"
 requires:
   plugins: []

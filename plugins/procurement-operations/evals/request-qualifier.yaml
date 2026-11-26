@@ -18,6 +18,7 @@ must_contain:
 - never guess, estimate or infer an amount
 - "`ask_human`"
 - always call `list_framework_agreements`
+- .tranibor/knowledge/purchasing-policy/
 - an agreement may serve any need
 - purchasing-policy
 - never invent a threshold

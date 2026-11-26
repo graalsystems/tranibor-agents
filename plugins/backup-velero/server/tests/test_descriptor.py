@@ -128,3 +128,27 @@ def test_the_declared_fake_switches_the_server_and_no_administrator_reaches_it()
     as_the_platform_runs_it = {**d["fake"]["env"], "TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}
     with TestClient(build_app(Settings.from_env(as_the_platform_runs_it))) as client:
         assert client.get("/healthz").json()["fake"] is True
+
+
+PROFILE = Path(__file__).resolve().parents[3] / "backup" / "profiles" / "backup.yaml"
+
+
+def _inline(node: Any, defs: dict[str, Any]) -> Any:
+    if isinstance(node, dict):
+        if "$ref" in node:
+            resolved = _inline(defs[node["$ref"].rsplit("/", 1)[-1]], defs)
+            return {**resolved, **{k: v for k, v in node.items() if k != "$ref"}}
+        return {k: _inline(v, defs) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_inline(v, defs) for v in node]
+    return node
+
+
+def test_schemas_are_the_profiles() -> None:
+    """The server's input and output schemas are the profile's, `$ref` resolved (the core proves the same)."""
+    profile = yaml.safe_load(PROFILE.read_text())
+    ops = operations()
+    for tool in profile["tools"]:
+        op = ops[tool["name"]]
+        assert op["input_schema"] == _inline(tool["input"], profile["$defs"]), tool["name"]
+        assert op["output_schema"] == _inline(tool["output"], profile["$defs"]), tool["name"]

@@ -94,23 +94,687 @@ egress:
 # administrator decides otherwise; `human_approval: true` is never lowered. `compensation` is the operation
 # that undoes the write, its arguments rendered from the write's own result.
 operations:
-  - {name: get_provider, access: read}
-  - {name: list_schedules, access: read}
-  - {name: list_backups, access: read}
-  - {name: get_backup, access: read}
-  - {name: list_locations, access: read}
-  - {name: list_restores, access: read}
-  - {name: get_restore, access: read}
-  - {name: backup_freshness, access: read}
-  - {name: storage_inventory, access: read}
-
+  - name: get_provider
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    output_schema:
+      type: object
+      required:
+      - instance
+      - provider
+      - restore_target_rule
+      - storage_inventory_configured
+      properties:
+        instance:
+          type: string
+          description: The name of this instance of the server (its connector name).
+        provider:
+          type: string
+          description: The backup system, e.g. velero.
+        restore_target_rule:
+          type: string
+          description: Where a restore test may go, in words, e.g. namespaces starting with restore-test-.
+        storage_inventory_configured:
+          type: boolean
+  - name: list_schedules
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    output_schema:
+      type: object
+      required:
+      - schedules
+      properties:
+        schedules:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - cron
+            - paused
+            properties:
+              id:
+                type: string
+              cron:
+                type: string
+              paused:
+                type: boolean
+              period_hours:
+                type:
+                - number
+                - 'null'
+              next_run:
+                type:
+                - string
+                - 'null'
+              location:
+                type:
+                - string
+                - 'null'
+              scope:
+                type: array
+                items:
+                  type: string
+              retention:
+                type:
+                - string
+                - 'null'
+              validation_errors:
+                type: array
+                items:
+                  type: string
+              backups_known:
+                type: integer
+              last_backup:
+                type:
+                - object
+                - 'null'
+                required:
+                - id
+                - status
+                - provider_status
+                properties:
+                  id:
+                    type: string
+                  schedule:
+                    type:
+                    - string
+                    - 'null'
+                  status:
+                    enum:
+                    - succeeded
+                    - partial
+                    - failed
+                    - running
+                    - pending
+                  provider_status:
+                    type: string
+                  errors:
+                    type: integer
+                  warnings:
+                    type: integer
+                  start:
+                    type:
+                    - string
+                    - 'null'
+                  completion:
+                    type:
+                    - string
+                    - 'null'
+                  age_hours:
+                    type:
+                    - number
+                    - 'null'
+                  expiration:
+                    type:
+                    - string
+                    - 'null'
+                  location:
+                    type:
+                    - string
+                    - 'null'
+                  scope:
+                    type: array
+                    items:
+                      type: string
+                    description: What the backup covers (namespaces, machines); empty means everything.
+                  size_bytes:
+                    type:
+                    - integer
+                    - 'null'
+                    description: Null when the system does not report it.
+                  items_backed_up:
+                    type:
+                    - integer
+                    - 'null'
+                  items_total:
+                    type:
+                    - integer
+                    - 'null'
+  - name: list_backups
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        schedule:
+          type: string
+          description: A schedule id.
+        status:
+          enum:
+          - succeeded
+          - partial
+          - failed
+          - running
+          - pending
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Default 20.
+    output_schema:
+      type: object
+      required:
+      - total
+      - backups
+      - truncated
+      properties:
+        total:
+          type: integer
+        truncated:
+          type: boolean
+        backups:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - status
+            - provider_status
+            properties:
+              id:
+                type: string
+              schedule:
+                type:
+                - string
+                - 'null'
+              status:
+                enum:
+                - succeeded
+                - partial
+                - failed
+                - running
+                - pending
+              provider_status:
+                type: string
+              errors:
+                type: integer
+              warnings:
+                type: integer
+              start:
+                type:
+                - string
+                - 'null'
+              completion:
+                type:
+                - string
+                - 'null'
+              age_hours:
+                type:
+                - number
+                - 'null'
+              expiration:
+                type:
+                - string
+                - 'null'
+              location:
+                type:
+                - string
+                - 'null'
+              scope:
+                type: array
+                items:
+                  type: string
+                description: What the backup covers (namespaces, machines); empty means everything.
+              size_bytes:
+                type:
+                - integer
+                - 'null'
+                description: Null when the system does not report it.
+              items_backed_up:
+                type:
+                - integer
+                - 'null'
+              items_total:
+                type:
+                - integer
+                - 'null'
+  - name: get_backup
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - backup
+      properties:
+        backup:
+          type: object
+          required:
+          - id
+          - status
+          - provider_status
+          properties:
+            id:
+              type: string
+            schedule:
+              type:
+              - string
+              - 'null'
+            status:
+              enum:
+              - succeeded
+              - partial
+              - failed
+              - running
+              - pending
+            provider_status:
+              type: string
+            errors:
+              type: integer
+            warnings:
+              type: integer
+            start:
+              type:
+              - string
+              - 'null'
+            completion:
+              type:
+              - string
+              - 'null'
+            age_hours:
+              type:
+              - number
+              - 'null'
+            expiration:
+              type:
+              - string
+              - 'null'
+            location:
+              type:
+              - string
+              - 'null'
+            scope:
+              type: array
+              items:
+                type: string
+              description: What the backup covers (namespaces, machines); empty means everything.
+            size_bytes:
+              type:
+              - integer
+              - 'null'
+              description: Null when the system does not report it.
+            items_backed_up:
+              type:
+              - integer
+              - 'null'
+            items_total:
+              type:
+              - integer
+              - 'null'
+  - name: list_locations
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    output_schema:
+      type: object
+      required:
+      - locations
+      properties:
+        locations:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - available
+            properties:
+              id:
+                type: string
+              provider:
+                type:
+                - string
+                - 'null'
+              available:
+                type: boolean
+              provider_status:
+                type:
+                - string
+                - 'null'
+              message:
+                type:
+                - string
+                - 'null'
+                description: Third-party text.
+              default:
+                type: boolean
+              last_checked:
+                type:
+                - string
+                - 'null'
+              last_checked_age_hours:
+                type:
+                - number
+                - 'null'
+  - name: list_restores
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        backup_id:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Default 20.
+    output_schema:
+      type: object
+      required:
+      - total
+      - restores
+      - truncated
+      properties:
+        total:
+          type: integer
+        truncated:
+          type: boolean
+        restores:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - backup_id
+            - status
+            - provider_status
+            properties:
+              id:
+                type: string
+              backup_id:
+                type:
+                - string
+                - 'null'
+              status:
+                enum:
+                - succeeded
+                - partial
+                - failed
+                - running
+                - pending
+              provider_status:
+                type: string
+              errors:
+                type: integer
+              warnings:
+                type: integer
+              start:
+                type:
+                - string
+                - 'null'
+              completion:
+                type:
+                - string
+                - 'null'
+              age_hours:
+                type:
+                - number
+                - 'null'
+              target:
+                type:
+                - string
+                - 'null'
+              items_restored:
+                type:
+                - integer
+                - 'null'
+              items_total:
+                type:
+                - integer
+                - 'null'
+              made_by_this_server:
+                type: boolean
+  - name: get_restore
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - restore
+      - comparison
+      properties:
+        restore:
+          type: object
+          required:
+          - id
+          - backup_id
+          - status
+          - provider_status
+          properties:
+            id:
+              type: string
+            backup_id:
+              type:
+              - string
+              - 'null'
+            status:
+              enum:
+              - succeeded
+              - partial
+              - failed
+              - running
+              - pending
+            provider_status:
+              type: string
+            errors:
+              type: integer
+            warnings:
+              type: integer
+            start:
+              type:
+              - string
+              - 'null'
+            completion:
+              type:
+              - string
+              - 'null'
+            age_hours:
+              type:
+              - number
+              - 'null'
+            target:
+              type:
+              - string
+              - 'null'
+            items_restored:
+              type:
+              - integer
+              - 'null'
+            items_total:
+              type:
+              - integer
+              - 'null'
+            made_by_this_server:
+              type: boolean
+        comparison:
+          type: object
+          required:
+          - comparable
+          properties:
+            comparable:
+              type: boolean
+            reason:
+              type: string
+            backup_items:
+              type:
+              - integer
+              - 'null'
+            restored_items:
+              type:
+              - integer
+              - 'null'
+            ratio:
+              type:
+              - number
+              - 'null'
+  - name: backup_freshness
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        max_age_hours:
+          type: number
+          minimum: 0.01
+          description: Overrides the allowance derived from each schedule's period; in hours, at least 0.01 (the profile
+            cannot say strictly positive).
+    output_schema:
+      type: object
+      required:
+      - schedules
+      properties:
+        schedules:
+          type: array
+          items:
+            type: object
+            required:
+            - schedule
+            - freshness
+            - age_hours
+            - allowed_age_hours
+            properties:
+              schedule:
+                type: string
+              freshness:
+                enum:
+                - fresh
+                - stale
+                - never
+                - paused
+              last_good_backup:
+                type:
+                - string
+                - 'null'
+              last_good_start:
+                type:
+                - string
+                - 'null'
+              age_hours:
+                type:
+                - number
+                - 'null'
+              allowed_age_hours:
+                type: number
+              basis:
+                type: string
+              newest_backup:
+                type:
+                - string
+                - 'null'
+              newest_backup_status:
+                type:
+                - string
+                - 'null'
+              newest_backup_errors:
+                type:
+                - integer
+                - 'null'
+              location:
+                type:
+                - string
+                - 'null'
+              location_available:
+                type:
+                - boolean
+                - 'null'
+  - name: storage_inventory
+    access: read
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        prefix:
+          type: string
+          description: A sub-path to look at.
+    output_schema:
+      type: object
+      required:
+      - configured
+      properties:
+        configured:
+          type: boolean
+        object_count:
+          type: integer
+        total_bytes:
+          type: integer
+        newest_object:
+          type:
+          - string
+          - 'null'
+        newest_object_age_hours:
+          type:
+          - number
+          - 'null'
+        truncated:
+          type: boolean
   # One more Backup, from the Schedule's own template: it costs storage and load, and Velero's retention
   # removes it. No `human_approval` floor (an administrator decides); no compensation, a backup is not undone.
   - name: trigger_backup
     access: write
     description: Runs a schedule's backup now, as one new Backup created from its template; idempotent through the platform's action_key.
     platform_arguments: [action_key]
-
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - schedule
+      properties:
+        schedule:
+          type: string
+          description: A schedule id.
+    output_schema:
+      type: object
+      required:
+      - schedule
+      - backup_id
+      - status
+      - already_existed
+      properties:
+        schedule:
+          type: string
+        backup_id:
+          type: string
+        status:
+          enum:
+          - succeeded
+          - partial
+          - failed
+          - running
+          - pending
+        already_existed:
+          type: boolean
   # Creates a namespace and a Restore inside the prefix and writes data there: a person approves, always.
   - name: run_restore_test
     access: write
@@ -121,12 +785,91 @@ operations:
       operation: cleanup_restore_test
       arguments:
         target: "{{ result.target }}"
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - backup_id
+      - source
+      properties:
+        backup_id:
+          type: string
+        source:
+          type: string
+          description: The part of the backup to restore (a namespace, a machine, a folder).
+        name:
+          type: string
+          description: A label for the target; the server adds the rule's prefix and a date.
+        include_data:
+          type: boolean
+          description: Restore the data volumes too. Default false.
+        exclude:
+          type: array
+          items:
+            type: string
+          description: Kinds of object to leave out of the restore (at most 20).
+    output_schema:
+      type: object
+      required:
+      - restore_id
+      - backup_id
+      - source
+      - target
+      - status
+      - already_existed
+      properties:
+        restore_id:
+          type: string
+        backup_id:
+          type: string
+        source:
+          type: string
+        target:
+          type: string
+          description: Where it was restored; what `cleanup_restore_test` takes.
+        include_data:
+          type:
+          - boolean
+          - 'null'
+        status:
+          enum:
+          - succeeded
+          - partial
+          - failed
+          - running
+          - pending
+        already_existed:
+          type: boolean
   # Only a namespace this server created inside the prefix; there is nothing to undo about a deletion of
   # throw-away data, so no compensation, and no approval to ask for.
   - name: cleanup_restore_test
     access: write
     human_approval: false
     description: Deletes a restore-test namespace; refused outside the prefix or when this server did not create it.
+    # The profile's schemas, copied (`$ref` resolved): the platform proves them against the profile.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - target
+      properties:
+        target:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - target
+      - deleted
+      properties:
+        target:
+          type: string
+        deleted:
+          type: boolean
+        already_gone:
+          type: boolean
+        terminating:
+          type: boolean
 
 # How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
 # switches it to its seeded in-memory cluster (server/src/tranibor_backup_velero/fake.py), which no

@@ -21,6 +21,8 @@
 # Writes return what undoes them: `run_restore_test` answers the `target` it created, which `cleanup_restore_test`
 # takes. A backup cannot be un-made, so `trigger_backup` has no compensation: retention removes it.
 #
+# `action_key` is a platform argument: the platform fills it, so the input schemas below do not list it.
+#
 # Provider-specific tools beyond this list are allowed on a server; agents of this profile never see them.
 name: backup
 version: 1
@@ -139,7 +141,7 @@ tools:
       type: object
       additionalProperties: false
       properties:
-        max_age_hours: {type: number, exclusiveMinimum: 0, description: Overrides the allowance derived from each schedule's period.}
+        max_age_hours: {type: number, minimum: 0.01, description: "Overrides the allowance derived from each schedule's period; in hours, at least 0.01 (the profile cannot say strictly positive)."}
     output:
       type: object
       required: [schedules]
@@ -197,7 +199,6 @@ tools:
       required: [schedule]
       properties:
         schedule: {type: string, description: A schedule id.}
-        action_key: {type: string}
     output:
       type: object
       required: [schedule, backup_id, status, already_existed]
@@ -222,11 +223,10 @@ tools:
       required: [backup_id, source]
       properties:
         backup_id: {type: string}
-        source: {type: string, description: The part of the backup to restore (a namespace, a machine, a folder).}
+        source: {type: string, description: "The part of the backup to restore (a namespace, a machine, a folder)."}
         name: {type: string, description: A label for the target; the server adds the rule's prefix and a date.}
         include_data: {type: boolean, description: Restore the data volumes too. Default false.}
         exclude: {type: array, items: {type: string}, description: Kinds of object to leave out of the restore (at most 20).}
-        action_key: {type: string}
     output:
       type: object
       required: [restore_id, backup_id, source, target, status, already_existed]
@@ -272,8 +272,8 @@ $defs:
       storage_inventory_configured: {type: boolean}
   backup:
     type: object
-    required: [id, status, provider_status]
-    properties:
+    required: &backup_required [id, status, provider_status]
+    properties: &backup_properties
       id: {type: string}
       schedule: {type: [string, "null"]}
       status: {$ref: "#/$defs/status"}
@@ -285,10 +285,15 @@ $defs:
       age_hours: {type: [number, "null"]}
       expiration: {type: [string, "null"]}
       location: {type: [string, "null"]}
-      scope: {type: array, items: {type: string}, description: What the backup covers (namespaces, machines); empty means everything.}
+      scope: {type: array, items: {type: string}, description: "What the backup covers (namespaces, machines); empty means everything."}
       size_bytes: {type: [integer, "null"], description: Null when the system does not report it.}
       items_backed_up: {type: [integer, "null"]}
       items_total: {type: [integer, "null"]}
+  # The profile subset has no oneOf: a backup or null is the same shape with the type widened (anchors, same text).
+  backup_or_null:
+    type: [object, "null"]
+    required: *backup_required
+    properties: *backup_properties
   schedule:
     type: object
     required: [id, cron, paused]
@@ -303,7 +308,7 @@ $defs:
       retention: {type: [string, "null"]}
       validation_errors: {type: array, items: {type: string}}
       backups_known: {type: integer}
-      last_backup: {oneOf: [{$ref: "#/$defs/backup"}, {type: "null"}]}
+      last_backup: {$ref: "#/$defs/backup_or_null"}
   location:
     type: object
     required: [id, available]

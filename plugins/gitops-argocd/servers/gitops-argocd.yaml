@@ -66,49 +66,852 @@ egress:
 # the platform renders every argument to a string, so the server accepts numbers and booleans as text.
 # `platform_arguments: [action_key]` is an idempotency key the platform fills, never the agent.
 operations:
-  - {name: get_provider, access: read}
-  - {name: list_applications, access: read}
-  - {name: get_application, access: read}
-  - {name: list_resources, access: read}
-  - {name: get_diff, access: read}
-  - {name: list_events, access: read}
-  - {name: get_sync_windows, access: read}
-  - {name: get_history, access: read}
-  - {name: get_revision_metadata, access: read}
+  - name: get_provider
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    output_schema:
+      $ref: '#/$defs/provider'
+      $defs:
+        provider:
+          type: object
+          required:
+          - instance
+          - provider
+          - scopes
+          properties:
+            instance:
+              type: string
+              description: The name of this instance of the server (its connector name).
+            provider:
+              type: string
+              description: The controller, e.g. argocd.
+            scopes:
+              type: array
+              items:
+                type: string
+              description: The scopes this instance may touch (its allow-list).
+  - name: list_applications
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+        sync_status:
+          enum:
+          - Synced
+          - OutOfSync
+          - Unknown
+        health:
+          enum:
+          - Healthy
+          - Progressing
+          - Degraded
+          - Suspended
+          - Missing
+          - Unknown
+        limit:
+          type: integer
+          minimum: 1
+    output_schema:
+      type: object
+      required:
+      - total
+      - truncated
+      - applications
+      properties:
+        total:
+          type: integer
+        truncated:
+          type: boolean
+        scopes:
+          type: array
+          items:
+            type: string
+        applications:
+          type: array
+          items:
+            $ref: '#/$defs/application_summary'
+      $defs:
+        application_summary:
+          type: object
+          required:
+          - name
+          - scope
+          - sync_status
+          - health
+          - auto_sync
+          properties:
+            name:
+              type: string
+            scope:
+              type: string
+            sync_status:
+              type:
+              - string
+              - 'null'
+            health:
+              type:
+              - string
+              - 'null'
+            revision:
+              type:
+              - string
+              - 'null'
+            auto_sync:
+              type: boolean
+  - name: get_application
+    access: read
+    input_schema:
+      $ref: '#/$defs/by_name'
+      $defs:
+        by_name:
+          type: object
+          additionalProperties: false
+          required:
+          - name
+          properties:
+            name:
+              type: string
+    output_schema:
+      type: object
+      required:
+      - name
+      - scope
+      - sync_status
+      - health
+      - auto_sync
+      - compared_revision
+      - last_deployed_revision
+      - revision_moved
+      - operation_in_progress
+      - history
+      properties:
+        name:
+          type: string
+        scope:
+          type: string
+        sync_status:
+          type:
+          - string
+          - 'null'
+        health:
+          type:
+          - string
+          - 'null'
+        revision:
+          type:
+          - string
+          - 'null'
+        auto_sync:
+          type: boolean
+        compared_revision:
+          type:
+          - string
+          - 'null'
+          description: The revision the desired state was last read at.
+        last_deployed_revision:
+          type:
+          - string
+          - 'null'
+        revision_moved:
+          type: boolean
+          description: True when compared_revision is not the last deployed one.
+        operation_in_progress:
+          type: boolean
+        operation_state:
+          type:
+          - object
+          - 'null'
+        lingering_partial_sync:
+          type:
+          - object
+          - 'null'
+        conditions:
+          type: array
+          items:
+            type: object
+        resources_not_synced:
+          type: array
+          items:
+            $ref: '#/$defs/resource_ref'
+        history:
+          type: array
+          items:
+            $ref: '#/$defs/history_entry'
+      $defs:
+        history_entry:
+          type: object
+          required:
+          - id
+          - revision
+          properties:
+            id:
+              type: integer
+            revision:
+              type:
+              - string
+              - 'null'
+            deployed_at:
+              type:
+              - string
+              - 'null'
+            initiated_by:
+              type:
+              - string
+              - 'null'
+        resource_ref:
+          type: object
+          required:
+          - kind
+          - name
+          properties:
+            group:
+              type: string
+            kind:
+              type: string
+            namespace:
+              type:
+              - string
+              - 'null'
+            name:
+              type: string
+  - name: list_resources
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+        unhealthy_only:
+          type: boolean
+        limit:
+          type: integer
+          minimum: 1
+    output_schema:
+      type: object
+      required:
+      - application
+      - total
+      - truncated
+      - nodes
+      properties:
+        application:
+          type: string
+        total:
+          type: integer
+        truncated:
+          type: boolean
+        nodes:
+          type: array
+          items:
+            type: object
+            required:
+            - kind
+            - name
+            properties:
+              group:
+                type: string
+              kind:
+                type: string
+              namespace:
+                type:
+                - string
+                - 'null'
+              name:
+                type: string
+              health:
+                type:
+                - string
+                - 'null'
+              health_message:
+                type:
+                - string
+                - 'null'
+  - name: get_diff
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+    output_schema:
+      type: object
+      required:
+      - application
+      - sync_status
+      - managed_total
+      - out_of_sync_total
+      - resources
+      - truncated
+      properties:
+        application:
+          type: string
+        sync_status:
+          type:
+          - string
+          - 'null'
+        managed_total:
+          type: integer
+        out_of_sync_total:
+          type: integer
+        truncated:
+          type: boolean
+        last_deployed_revision:
+          type:
+          - string
+          - 'null'
+        compared_revision:
+          type:
+          - string
+          - 'null'
+        resources:
+          type: array
+          items:
+            type: object
+            required:
+            - kind
+            - name
+            - reason
+            - changes
+            properties:
+              kind:
+                type: string
+              name:
+                type: string
+              namespace:
+                type:
+                - string
+                - 'null'
+              reason:
+                enum:
+                - missing_in_cluster
+                - not_in_git
+                - differs
+              changes:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - path
+                  - live
+                  - desired
+                  properties:
+                    path:
+                      type: string
+                    live:
+                      type: string
+                    desired:
+                      type: string
+              noise_hints:
+                type: array
+                items:
+                  type: string
+              all_changes_look_controller_owned:
+                type: boolean
+  - name: list_events
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        resource_name:
+          type: string
+        resource_namespace:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+    output_schema:
+      type: object
+      required:
+      - application
+      - total
+      - warnings
+      - truncated
+      - events
+      properties:
+        application:
+          type: string
+        total:
+          type: integer
+        warnings:
+          type: integer
+        truncated:
+          type: boolean
+        events:
+          type: array
+          items:
+            type: object
+  - name: get_sync_windows
+    access: read
+    input_schema:
+      $ref: '#/$defs/by_name'
+      $defs:
+        by_name:
+          type: object
+          additionalProperties: false
+          required:
+          - name
+          properties:
+            name:
+              type: string
+    output_schema:
+      type: object
+      required:
+      - application
+      - can_sync
+      - active_windows
+      - assigned_windows
+      properties:
+        application:
+          type: string
+        can_sync:
+          type: boolean
+        active_windows:
+          type: array
+          items:
+            type: object
+        assigned_windows:
+          type: array
+          items:
+            type: object
+  - name: get_history
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+    output_schema:
+      type: object
+      required:
+      - application
+      - auto_sync
+      - history
+      - last_deployed_revision
+      - compared_revision
+      - revision_moved
+      - rollback_possible
+      properties:
+        application:
+          type: string
+        auto_sync:
+          type: boolean
+        history:
+          type: array
+          items:
+            $ref: '#/$defs/history_entry'
+        last_deployed_revision:
+          type:
+          - string
+          - 'null'
+        compared_revision:
+          type:
+          - string
+          - 'null'
+        revision_moved:
+          type: boolean
+        rollback_possible:
+          type: boolean
+        note:
+          type: string
+      $defs:
+        history_entry:
+          type: object
+          required:
+          - id
+          - revision
+          properties:
+            id:
+              type: integer
+            revision:
+              type:
+              - string
+              - 'null'
+            deployed_at:
+              type:
+              - string
+              - 'null'
+            initiated_by:
+              type:
+              - string
+              - 'null'
+  - name: get_revision_metadata
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - revision
+      properties:
+        name:
+          type: string
+        revision:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - application
+      - revision
+      - message
+      properties:
+        application:
+          type: string
+        revision:
+          type: string
+        author:
+          type: string
+        date:
+          type:
+          - string
+          - 'null'
+        message:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
   - name: plan_sync
     access: read
     description: What a sync would do, computed from the diff. Writes nothing.
-
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        resources:
+          type: array
+          items:
+            $ref: '#/$defs/resource_selector'
+        prune:
+          type: boolean
+      $defs:
+        resource_selector:
+          type: object
+          additionalProperties: false
+          required:
+          - kind
+          - name
+          properties:
+            group:
+              type: string
+              description: API group ("" for the core group); left out, read from the application.
+            kind:
+              type: string
+            name:
+              type: string
+            namespace:
+              type: string
+    output_schema:
+      type: object
+      required:
+      - application
+      - mode
+      - prune
+      - would_create
+      - would_update
+      - would_prune
+      - blocked
+      - warnings
+      properties:
+        application:
+          type: string
+        mode:
+          enum:
+          - full
+          - selective
+        prune:
+          type: boolean
+        would_create:
+          type: array
+          items:
+            type: string
+        would_update:
+          type: array
+          items:
+            type: string
+        would_prune:
+          type: array
+          items:
+            type: string
+        left_alone_without_prune:
+          type: array
+          items:
+            type: string
+        blocked:
+          type: array
+          items:
+            type: string
+          description: Empty when a sync can start now.
+        warnings:
+          type: array
+          items:
+            type: string
+        not_simulated:
+          type: string
   - name: refresh_application
     access: write
-    description: Asks Argo CD to re-read git (normal) or to drop its manifest cache (hard). Nothing changes in the cluster.
-
+    description: Asks Argo CD to re-read git (normal) or to drop its manifest cache (hard). Nothing changes in the
+      cluster.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        mode:
+          enum:
+          - normal
+          - hard
+    output_schema:
+      type: object
+      required:
+      - application
+      - refresh
+      - requested_at
+      properties:
+        application:
+          type: string
+        refresh:
+          enum:
+          - normal
+          - hard
+        requested_at:
+          type: string
+        state:
+          $ref: '#/$defs/application_summary'
+      $defs:
+        application_summary:
+          type: object
+          required:
+          - name
+          - scope
+          - sync_status
+          - health
+          - auto_sync
+          properties:
+            name:
+              type: string
+            scope:
+              type: string
+            sync_status:
+              type:
+              - string
+              - 'null'
+            health:
+              type:
+              - string
+              - 'null'
+            revision:
+              type:
+              - string
+              - 'null'
+            auto_sync:
+              type: boolean
   - name: sync_application
     access: write
     human_approval: true
-    description: A full sync by default; a resource list only with a written justification. prune is false unless asked. With a revision, deploys that revision (how a rollback is undone). Idempotent through the platform's action_key.
-    platform_arguments: [action_key]
-
+    description: A full sync by default; a resource list only with a written justification. prune is false unless
+      asked. With a revision, deploys that revision (how a rollback is undone). Idempotent through the platform's
+      action_key.
+    platform_arguments:
+    - action_key
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        resources:
+          type: array
+          items:
+            $ref: '#/$defs/resource_selector'
+        justification:
+          type: string
+        prune:
+          type: boolean
+        revision:
+          type: string
+      $defs:
+        resource_selector:
+          type: object
+          additionalProperties: false
+          required:
+          - kind
+          - name
+          properties:
+            group:
+              type: string
+              description: API group ("" for the core group); left out, read from the application.
+            kind:
+              type: string
+            name:
+              type: string
+            namespace:
+              type: string
+    output_schema:
+      type: object
+      required:
+      - application
+      - sync_requested
+      - already_applied
+      properties:
+        application:
+          type: string
+        sync_requested:
+          type: boolean
+          description: False when this governed action had already started the sync and nothing was sent again.
+        already_applied:
+          type: boolean
+        mode:
+          enum:
+          - full
+          - selective
+        prune:
+          type: boolean
+        revision:
+          type:
+          - string
+          - 'null'
+          description: The revision asked for; null for the desired state's own.
+        previous_history_id:
+          type:
+          - integer
+          - 'null'
+        warnings:
+          type: array
+          items:
+            type: string
   - name: rollback_application
     access: write
     human_approval: true
-    description: Redeploys the revision of a history entry; refused while auto-sync is on. Undone by a sync back to the revision that was in force.
+    description: Redeploys the revision of a history entry; refused while auto-sync is on. Undone by a sync back to
+      the revision that was in force.
     compensation:
       operation: sync_application
       arguments:
-        name: "{{ result.application }}"
-        revision: "{{ result.previous_revision }}"
-        prune: "{{ 'true' if result.prune else 'false' }}"
-
+        name: '{{ result.application }}'
+        revision: '{{ result.previous_revision }}'
+        prune: '{{ ''true'' if result.prune else ''false'' }}'
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - history_id
+      properties:
+        name:
+          type: string
+        history_id:
+          type: integer
+        prune:
+          type: boolean
+    output_schema:
+      type: object
+      required:
+      - application
+      - rollback_requested
+      - id
+      - revision
+      - previous_id
+      - previous_revision
+      - prune
+      properties:
+        application:
+          type: string
+        rollback_requested:
+          type: boolean
+        id:
+          type: integer
+        revision:
+          type: string
+        previous_id:
+          type: integer
+        previous_revision:
+          type: string
+        prune:
+          type: boolean
+        note:
+          type: string
   - name: set_auto_sync
     access: write
     human_approval: true
-    description: Pauses or resumes the automated sync of one application (resuming restores the prune / self-heal settings that pausing saved). Undone by calling it with the previous state.
+    description: Pauses or resumes the automated sync of one application (resuming restores the prune / self-heal
+      settings that pausing saved). Undone by calling it with the previous state.
     compensation:
       operation: set_auto_sync
       arguments:
-        name: "{{ result.application }}"
-        enabled: "{{ 'true' if result.previous_enabled else 'false' }}"
+        name: '{{ result.application }}'
+        enabled: '{{ ''true'' if result.previous_enabled else ''false'' }}'
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - enabled
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+    output_schema:
+      type: object
+      required:
+      - application
+      - changed
+      - enabled
+      - previous_enabled
+      properties:
+        application:
+          type: string
+        changed:
+          type: boolean
+        enabled:
+          type: boolean
+        previous_enabled:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+
+# The schemas above are the profile's own (same subset), each with the `$defs` it points to, so what the server
+# takes and returns is provably inside the contract (`plugin validate --profiles-from`). The platform-filled
+# `action_key` is left out of the input: the profile does not list it either (it is `platform_arguments`).
 
 # How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
 # switches it to its seeded in-memory Argo CD (server/src/tranibor_gitops_argocd/config.py), which no

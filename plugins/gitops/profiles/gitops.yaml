@@ -65,21 +65,26 @@ tools:
       drift). `lingering_partial_sync` is set when the record of the last operation still holds a partial
       sync's resource list (a provider without such a trap leaves it out).
     input: {$ref: "#/$defs/by_name"}
+    # The profile's schema subset has no `allOf`: the summary's fields (see `application_summary`) are repeated.
     output:
-      allOf:
-        - {$ref: "#/$defs/application_summary"}
-        - type: object
-          required: [compared_revision, last_deployed_revision, revision_moved, operation_in_progress, history]
-          properties:
-            compared_revision: {type: [string, "null"], description: The revision the desired state was last read at.}
-            last_deployed_revision: {type: [string, "null"]}
-            revision_moved: {type: boolean, description: True when compared_revision is not the last deployed one.}
-            operation_in_progress: {type: boolean}
-            operation_state: {type: [object, "null"]}
-            lingering_partial_sync: {type: [object, "null"]}
-            conditions: {type: array, items: {type: object}}
-            resources_not_synced: {type: array, items: {$ref: "#/$defs/resource_ref"}}
-            history: {type: array, items: {$ref: "#/$defs/history_entry"}}
+      type: object
+      required: [name, scope, sync_status, health, auto_sync, compared_revision, last_deployed_revision, revision_moved, operation_in_progress, history]
+      properties:
+        name: {type: string}
+        scope: {type: string}
+        sync_status: {type: [string, "null"]}
+        health: {type: [string, "null"]}
+        revision: {type: [string, "null"]}
+        auto_sync: {type: boolean}
+        compared_revision: {type: [string, "null"], description: The revision the desired state was last read at.}
+        last_deployed_revision: {type: [string, "null"]}
+        revision_moved: {type: boolean, description: True when compared_revision is not the last deployed one.}
+        operation_in_progress: {type: boolean}
+        operation_state: {type: [object, "null"]}
+        lingering_partial_sync: {type: [object, "null"]}
+        conditions: {type: array, items: {type: object}}
+        resources_not_synced: {type: array, items: {$ref: "#/$defs/resource_ref"}}
+        history: {type: array, items: {$ref: "#/$defs/history_entry"}}
 
   - name: list_resources
     access: read
@@ -314,7 +319,6 @@ tools:
         justification: {type: string}
         prune: {type: boolean}
         revision: {type: string}
-        action_key: {type: string}
     output:
       type: object
       required: [application, sync_requested, already_applied]

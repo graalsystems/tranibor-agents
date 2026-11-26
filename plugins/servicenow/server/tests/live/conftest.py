@@ -2,7 +2,7 @@
 """The server against a REAL ServiceNow instance: opt-in, skipped without its variables.
 
     TRANIBOR_LIVE_SERVICENOW_URL=https://<instance>.service-now.com \\
-    TRANIBOR_LIVE_SERVICENOW_USERNAME=choregos.integration TRANIBOR_LIVE_SERVICENOW_PASSWORD=… \\
+    TRANIBOR_LIVE_SERVICENOW_USERNAME=tranibor.integration TRANIBOR_LIVE_SERVICENOW_PASSWORD=… \\
     TRANIBOR_LIVE_SERVICENOW_CLIENT_ID=… TRANIBOR_LIVE_SERVICENOW_CLIENT_SECRET=… \\
     TRANIBOR_LIVE_SERVICENOW_CLEANUP_USERNAME=… TRANIBOR_LIVE_SERVICENOW_CLEANUP_PASSWORD=… \\
       uv run pytest tests/live -q
@@ -11,9 +11,9 @@
   needs the role `snc_basic_auth_api_access`); the client id and secret, its OAuth client credentials
   integration. Each set that is present runs every test; at least one is needed.
 - The cleanup user may delete (an administrator of a development instance): the run deletes what it
-  created (found by its title's tag or its correlation id, `choregos:live-<run>-…`), and files the request
+  created (found by its title's tag or its correlation id, `tranibor:live-<run>-…`), and files the request
   item the tracker tests need. Without it, the run leaves its incidents resolved and its change canceled,
-  their titles tagged `[choregos-live <run>]`, and the request item test skips.
+  their titles tagged `[tranibor-live <run>]`, and the request item test skips.
 - `TRANIBOR_LIVE_SERVICENOW_GROUP` is the assignment group of the queue (`Service Desk` by default). On an
   instance that a deployment also watches, name a group it does not: its triage project opens every
   incident filed in its queue as a work item and writes to it while the suite does (#66).
@@ -31,15 +31,15 @@ from typing import Any
 import httpx
 import pytest
 
-from choregos_servicenow.app import Runtime, build_server
-from choregos_servicenow.config import Settings
+from tranibor_servicenow.app import Runtime, build_server
+from tranibor_servicenow.config import Settings
 
 from ..conftest import Mcp
 
 RUN = uuid.uuid4().hex[:8]
-TAG = f"[choregos-live {RUN}]"
-#: What the run's creations carry as their idempotency key (`choregos:<action_key>`, keys `live-<run>-…`).
-CORRELATION = f"choregos:live-{RUN}-"
+TAG = f"[tranibor-live {RUN}]"
+#: What the run's creations carry as their idempotency key (`tranibor:<action_key>`, keys `live-<run>-…`).
+CORRELATION = f"tranibor:live-{RUN}-"
 
 
 def _env(name: str) -> str:

@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from choregos_servicenow.fake import FakeServiceNow, sys_id_of
+from tranibor_servicenow.fake import FakeServiceNow, sys_id_of
 
 from .conftest import Mcp
 

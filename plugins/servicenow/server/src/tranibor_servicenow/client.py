@@ -58,7 +58,7 @@ DEFAULT_STATE_CHOICES: dict[str, dict[str, str]] = {
     },
 }  # fmt: skip
 
-log = structlog.get_logger("choregos_servicenow.client")
+log = structlog.get_logger("tranibor_servicenow.client")
 
 
 @dataclass

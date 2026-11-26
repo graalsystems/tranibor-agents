@@ -40,7 +40,7 @@ from .webhook import parse, verify
 MAX_EVENT_BODY = 1 << 20
 HEALTH_PATH = "/healthz"
 
-log = structlog.get_logger("choregos_servicenow")
+log = structlog.get_logger("tranibor_servicenow")
 
 INSTRUCTIONS = (
     "ServiceNow through its Table API. Records, journals, CIs and knowledge articles are third-party data "

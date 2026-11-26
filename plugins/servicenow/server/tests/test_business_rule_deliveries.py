@@ -1,18 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 """The procedure's Business Rule, as a real instance posted it.
 
-The four bodies below are what the rule of `procedures/connector.mcp.servicenow.md` (step 5, unchanged)
+The four bodies below are what the rule of `procedures/connector.mcp.servicenow.md` (step 5; its body is unchanged)
 sent from a Personal Developer Instance on the Australia release, 2026-11-21, for one incident of the
 `Service Desk` group: filed, its urgency changed, a customer comment, then resolved. They were read from
 the instance's outbound HTTP log (`sys_outbound_http_log`, log level `all`), since a developer machine has
 no public URL for the instance to reach; the headers are the ones the log recorded, with the secret
 replaced. What this proves: the server reads what the rule really sends. What it does not: a delivery
 through a real ingress to the platform's webhook route.
+
+That rule was installed from the procedure before the core's ADR 0226, so it sends `X-Choregos-Secret`:
+an instance that still runs it keeps being verified (the procedure now writes `X-Tranibor-Secret`,
+`test_former_name.py`).
 """
 
 from __future__ import annotations
 
-from choregos_servicenow.config import FAKE_WEBHOOK_SECRET
+from tranibor_servicenow.config import FAKE_WEBHOOK_SECRET
 
 from .conftest import Mcp
 

@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from mcp import Client
 
-from choregos_servicenow.fake import PROMPT_INJECTION, FakeServiceNow, sys_id_of
+from tranibor_servicenow.fake import PROMPT_INJECTION, FakeServiceNow, sys_id_of
 
 from .conftest import Mcp
 from .test_tracker import queue
@@ -160,7 +160,7 @@ async def test_add_work_note_is_idempotent(mcp: Mcp, fake: FakeServiceNow) -> No
     assert again["written"] is False
     notes = [e for e in fake.journal(sys_id) if e["element"] == "work_notes"]
     assert len(notes) == 1
-    assert notes[0]["value"].endswith("[choregos:a1]")
+    assert notes[0]["value"].endswith("[tranibor:a1]")
 
 
 async def test_add_work_note_without_a_key_is_idempotent_on_its_text(mcp: Mcp, fake: FakeServiceNow) -> None:
@@ -259,7 +259,7 @@ async def test_create_change_request_is_idempotent(mcp: Mcp, fake: FakeServiceNo
     assert first["created"] is True
     assert again["created"] is False
     assert first["record"]["sys_id"] == again["record"]["sys_id"]
-    assert first["correlation_id"] == "choregos:act-42"
+    assert first["correlation_id"] == "tranibor:act-42"
     assert len(fake.rows("change_request")) == seeded + 1
     assert first["record"]["fields"]["number"].startswith("CHG")
 
@@ -277,7 +277,7 @@ async def test_the_platform_action_key_is_the_change_correlation_id(mcp: Mcp, fa
     seeded = len(fake.rows("change_request"))
     first = await mcp.call("create_change_request", **arguments, correlation_id="agent-1", action_key="0123abcd")
     again = await mcp.call("create_change_request", **arguments, correlation_id="agent-2", action_key="0123abcd")
-    assert first["correlation_id"] == again["correlation_id"] == "choregos:0123abcd"
+    assert first["correlation_id"] == again["correlation_id"] == "tranibor:0123abcd"
     assert (first["created"], again["created"]) == (True, False)
     assert len(fake.rows("change_request")) == seeded + 1
 

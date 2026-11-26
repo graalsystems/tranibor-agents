@@ -23,13 +23,14 @@ from .client import MAX_ROWS, ServiceNowClient
 from .errors import Refused
 from .query import Filter, Op, Query, eq
 from .tables import TRACKER_TABLES, UPDATABLE_FIELDS, is_sys_id, table_of_number
-from .tools import ServiceNowTools, marker_of, text_key, unkept
+from .tools import FORMER_NAME, NAME, ServiceNowTools, correlations_of, find_correlated, text_key, unkept
 from .webhook import CLOSED_STATES, parse, verify
 
-log = structlog.get_logger("choregos_servicenow.tracker")
+log = structlog.get_logger("tranibor_servicenow.tracker")
 
-_STATUS = re.compile(r"\[choregos-status:([A-Za-z0-9._:-]{1,80})\]")
-_ANY_MARKER = re.compile(r"\[choregos(?:-status)?:([A-Za-z0-9._:-]{1,80})\]")
+#: A work note's marker, written `[tranibor:<key>]` or `[tranibor-status:<marker>]`; the former name's
+#: (`[choregos:…]`, `[choregos-status:…]`), on the notes written before the core's ADR 0226, is read too.
+_ANY_MARKER = re.compile(r"\[(?:tranibor|choregos)(?:-status)?:([A-Za-z0-9._:-]{1,80})\]")
 _CREATE_FIELDS = UPDATABLE_FIELDS | {"caller_id"}
 #: How each table is closed: the state label, and the close code ServiceNow asks for.
 _CLOSE: dict[str, tuple[str, str | None]] = {
@@ -40,6 +41,18 @@ _CLOSE: dict[str, tuple[str, str | None]] = {
 #: The most keys `tracker_list_candidates` answers (`plugin-tracker-profile.schema.json` of the core:
 #: `limit` at most 200, `keys` at most 200 items).
 CANDIDATES_BOUND = 200
+
+
+def status_tags(marker: str) -> list[str]:
+    """`[tranibor-status:<marker>]`, the tag written, then every form of it a status note may carry: the
+    former tag `[choregos-status:…]`, and the marker's twin (`tranibor:status` for `choregos:status`, and
+    the reverse), the core handing the former marker until its ADR 0226 window closes."""
+    correlations_of(marker)  # the marker's alphabet, refused as an action key's is
+    twins = [marker]
+    for prefix, other in ((f"{FORMER_NAME}:", f"{NAME}:"), (f"{NAME}:", f"{FORMER_NAME}:")):
+        if marker.startswith(prefix):
+            twins.append(other + marker.removeprefix(prefix))
+    return [f"[{name}-status:{m}]" for name in (NAME, FORMER_NAME) for m in twins]
 
 
 def iso(value: Any) -> str | None:
@@ -133,9 +146,8 @@ class Tracker:
             if name in ("assignment_group", "assigned_to", "cmdb_ci", "caller_id") and not is_sys_id(value):
                 raise Refused(f"{name} takes a sys_id")
         key = action_key or text_key(title, body)
-        marker_of(key)
-        correlation = f"choregos:{key}"
-        existing = await self.client.find_one("incident", Query("incident").where(eq("correlation_id", correlation)))
+        correlation = correlations_of(key)[0]
+        existing = await self.client.find_one("incident", find_correlated("incident", key))
         if existing is not None:
             return {"key": existing["fields"]["number"], "sys_id": existing["sys_id"], "created": False}
         values = {"short_description": title, "description": body, "correlation_id": correlation, **extra}
@@ -200,15 +212,21 @@ class Tracker:
         return {"key": key, "id": result["marker"], "written": result["written"]}
 
     async def upsert_status(self, key: str, markdown: str, marker: str) -> dict[str, Any]:
-        """Journals are append-only: a new work note is added only when the status text changed."""
-        marker_of(marker)
+        """Journals are append-only: a new work note is added only when the status text changed.
+
+        The note is tagged `[tranibor-status:<marker>]`. The latest status note is found under either name
+        of the tag and either name of the marker (`tranibor:status`, or the `choregos:status` the core hands
+        until its ADR 0226 window closes): a status an earlier version wrote is not written again."""
+        tags = status_tags(marker)
         table, row = await self._item(key)
-        tag = f"[choregos-status:{marker}]"
         journal = await self.tools.journal_entries(table, row["sys_id"], ("work_notes",), MAX_ROWS)
-        latest = next((e for e in journal if tag in str(e["value"])), None)
-        if latest is not None and str(latest["value"]).replace(tag, "").strip() == markdown.strip():
+        latest = next(
+            ((e, tag) for e in journal for tag in tags if tag in str(e["value"])),
+            None,
+        )
+        if latest is not None and str(latest[0]["value"]).replace(latest[1], "").strip() == markdown.strip():
             return {"key": key, "written": False}
-        await self.client.update(table, row["sys_id"], {"work_notes": f"{markdown}\n\n{tag}"})
+        await self.client.update(table, row["sys_id"], {"work_notes": f"{markdown}\n\n{tags[0]}"})
         return {"key": key, "written": True}
 
     async def close(self, key: str, close_notes: str | None = None, close_code: str | None = None) -> dict[str, Any]:

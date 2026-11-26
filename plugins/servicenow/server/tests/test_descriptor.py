@@ -15,9 +15,9 @@ from mcp import Client
 from mcp.server.mcpserver import MCPServer
 from starlette.testclient import TestClient
 
-from choregos_servicenow.app import build_app
-from choregos_servicenow.config import Settings
-from choregos_servicenow.fake import sys_id_of
+from tranibor_servicenow.app import build_app
+from tranibor_servicenow.config import Settings
+from tranibor_servicenow.fake import sys_id_of
 
 from .conftest import Mcp
 

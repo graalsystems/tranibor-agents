@@ -8,11 +8,11 @@ import pytest
 import respx
 from pydantic import SecretStr
 
-from choregos_servicenow import client as client_module
-from choregos_servicenow.client import ServiceNowClient
-from choregos_servicenow.config import Settings
-from choregos_servicenow.errors import Refused, ServiceNowError
-from choregos_servicenow.query import Query, eq
+from tranibor_servicenow import client as client_module
+from tranibor_servicenow.client import ServiceNowClient
+from tranibor_servicenow.config import Settings
+from tranibor_servicenow.errors import Refused, ServiceNowError
+from tranibor_servicenow.query import Query, eq
 
 BASE = "https://acme.service-now.com"
 ROW = {"sys_id": {"value": "a" * 32, "display_value": "a" * 32}, "number": {"value": "INC1", "display_value": "INC1"}}
@@ -25,7 +25,7 @@ def oauth_settings() -> Settings:
 @respx.mock
 async def test_oauth_token_is_cached_until_it_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = [1000.0]
-    monkeypatch.setattr("choregos_servicenow.client.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("tranibor_servicenow.client.time.monotonic", lambda: clock[0])
     tokens = iter(["t1", "t2"])
     token_route = respx.post(f"{BASE}/oauth_token.do").mock(
         side_effect=lambda request: httpx.Response(200, json={"access_token": next(tokens), "expires_in": 1800})

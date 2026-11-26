@@ -11,10 +11,10 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
-from choregos_servicenow.app import Runtime, build_app, build_server
-from choregos_servicenow.config import Settings
-from choregos_servicenow.fake import FakeServiceNow
-from choregos_servicenow.seed_file import SeedError, load_seed_file
+from tranibor_servicenow.app import Runtime, build_app, build_server
+from tranibor_servicenow.config import Settings
+from tranibor_servicenow.fake import FakeServiceNow
+from tranibor_servicenow.seed_file import SeedError, load_seed_file
 
 from .conftest import Mcp
 

@@ -20,4 +20,4 @@ COPY seeds /app/seeds
 USER 65532:65532
 EXPOSE 8080
 # Exec form: nothing runs through a shell.
-ENTRYPOINT ["/app/.venv/bin/choregos-servicenow"]
+ENTRYPOINT ["/app/.venv/bin/tranibor-servicenow"]

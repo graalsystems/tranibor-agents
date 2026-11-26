@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from choregos_servicenow.app import Runtime
-from choregos_servicenow.errors import ServiceNowError
-from choregos_servicenow.fake import DATE_FORMAT, FakeServiceNow, sys_id_of
+from tranibor_servicenow.app import Runtime
+from tranibor_servicenow.errors import ServiceNowError
+from tranibor_servicenow.fake import DATE_FORMAT, FakeServiceNow, sys_id_of
 
 from .conftest import Mcp
 
@@ -76,7 +76,7 @@ async def test_a_closed_item_is_never_reopened_by_a_state_move(mcp: Mcp, fake: F
 async def test_comment_is_an_internal_work_note_and_idempotent(mcp: Mcp, fake: FakeServiceNow) -> None:
     first = await mcp.call("tracker_comment", key="INC0010011", markdown="Run started.", action_key="c1")
     again = await mcp.call("tracker_comment", key="INC0010011", markdown="Run started.", action_key="c1")
-    assert first == {"key": "INC0010011", "id": "[choregos:c1]", "written": True}
+    assert first == {"key": "INC0010011", "id": "[tranibor:c1]", "written": True}
     assert again["written"] is False
     assert [e["element"] for e in fake.journal(sys_id_of("INC0010011"))] == ["work_notes"]
 
@@ -115,12 +115,12 @@ async def test_journal_entries_of_one_second_come_in_one_order(mcp: Mcp, fake: F
 async def test_rendered_journal_entries_of_one_second_come_in_one_order(mcp: Mcp, fake: FakeServiceNow) -> None:
     """The same tie when the journal is read from the record's rendered fields (#63): the entry's derived id
     decides it. The fake renders the later written first, so a sort on the date alone answers write order;
-    these two texts' ids rank the other way. The user reads UTC here: the dates were lost when a date's label
-    equalled its value."""
+    these two texts' ids rank the other way (with the marker `status`: the tag is in the text). The user reads
+    UTC here: the dates were lost when a date's label equalled its value."""
     fake.journal_readable = False
     sys_id = sys_id_of("INC0010011")
     for stage in ("Triage", "Review"):
-        assert (await mcp.call("tracker_upsert_status", key="INC0010011", markdown=stage, marker="s"))["written"]
+        assert (await mcp.call("tracker_upsert_status", key="INC0010011", markdown=stage, marker="status"))["written"]
     for row in fake.journal(sys_id):
         row["sys_created_on"] = "2026-11-25 10:00:00"
 
@@ -128,7 +128,8 @@ async def test_rendered_journal_entries_of_one_second_come_in_one_order(mcp: Mcp
     assert [c["body"].split("\n")[0] for c in item["comments"]] == ["Review", "Triage"]
     order = [(c["ts"], c["id"]) for c in item["comments"]]
     assert {ts for ts, _ in order} == {"2026-11-25T10:00:00Z"} and order == sorted(order)
-    assert not (await mcp.call("tracker_upsert_status", key="INC0010011", markdown="Triage", marker="s"))["written"]
+    same = await mcp.call("tracker_upsert_status", key="INC0010011", markdown="Triage", marker="status")
+    assert not same["written"]
 
 
 async def test_close_each_kind_of_item_once(mcp: Mcp, fake: FakeServiceNow) -> None:
@@ -169,14 +170,14 @@ async def test_parse_event_verifies_then_normalises(mcp: Mcp) -> None:
     body = json.dumps(
         {"table": "incident", "sys_id": sys_id_of("INC0010001"), "number": "INC0010001", "sys_mod_count": 3}
     )
-    good = await mcp.call("tracker_parse_event", headers={"X-Choregos-Secret": "fake-webhook-secret"}, body=body)
+    good = await mcp.call("tracker_parse_event", headers={"X-Tranibor-Secret": "fake-webhook-secret"}, body=body)
     assert good == {
         "verified": True,
         "events": [
             {"kind": "tracker.item.updated", "item_key": "INC0010001", "delivery_id": f"{sys_id_of('INC0010001')}:3"}
         ],
     }
-    bad = await mcp.call("tracker_parse_event", headers={"X-Choregos-Secret": "nope"}, body=body)
+    bad = await mcp.call("tracker_parse_event", headers={"X-Tranibor-Secret": "nope"}, body=body)
     assert bad == {"verified": False, "events": []}
 
 

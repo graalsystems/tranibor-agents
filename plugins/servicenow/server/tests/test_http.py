@@ -11,15 +11,15 @@ import pytest
 from pydantic import SecretStr
 from starlette.testclient import TestClient
 
-from choregos_servicenow.app import build_app
-from choregos_servicenow.config import Settings
-from choregos_servicenow.fake import sys_id_of
+from tranibor_servicenow.app import build_app
+from tranibor_servicenow.config import Settings
+from tranibor_servicenow.fake import sys_id_of
 
 SECRET = "s3cret-for-tests"
 TOKEN = "platform-token-for-tests"
 BEARER = {"Authorization": f"Bearer {TOKEN}"}
 #: The Host the platform's Service gives the server: not localhost, and accepted.
-BASE = "http://servicenow.choregos-plugins.svc:8080"
+BASE = "http://servicenow.tranibor-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
 
 
@@ -46,7 +46,7 @@ def test_healthz(http: TestClient) -> None:
     assert http.get("/healthz", headers={"Authorization": ""}).json() == {
         "status": "ok",
         "fake": True,
-        "version": "0.1.10",
+        "version": "0.1.11",
     }
 
 
@@ -69,7 +69,7 @@ def test_mcp_with_the_platform_token_answers(http: TestClient) -> None:
 
 
 def test_events_need_the_platform_token_as_well_as_the_secret(http: TestClient) -> None:
-    headers = {"X-Choregos-Secret": SECRET, "Authorization": ""}
+    headers = {"X-Tranibor-Secret": SECRET, "Authorization": ""}
     assert http.post("/events", headers=headers, content=json.dumps(_event())).status_code == 401
 
 
@@ -132,7 +132,7 @@ def test_mcp_over_streamable_http(http: TestClient) -> None:
     assert result["structuredContent"]["fields"]["name"] == "lb-01"
 
 
-@pytest.mark.parametrize("headers", [{}, {"X-Choregos-Secret": "wrong"}, {"X-Choregos-Secret": SECRET + "x"}])
+@pytest.mark.parametrize("headers", [{}, {"X-Tranibor-Secret": "wrong"}, {"X-Tranibor-Secret": SECRET + "x"}])
 def test_events_with_a_bad_secret_are_refused(http: TestClient, headers: dict[str, str]) -> None:
     response = http.post("/events", headers=headers, content=json.dumps(_event()))
     assert response.status_code == 401
@@ -147,7 +147,7 @@ def test_events_are_normalised(http: TestClient) -> None:
         _event(table="sc_req_item", number="RITM0010001", sys_id=sys_id_of("RITM0010001"), state="3"),
         _event(table="problem", number="PRB0010001"),  # not a tracker table: ignored
     ]
-    response = http.post("/events", headers={"x-choregos-secret": SECRET}, content=json.dumps(body))
+    response = http.post("/events", headers={"x-tranibor-secret": SECRET}, content=json.dumps(body))
     assert response.status_code == 200
     sid = sys_id_of("INC0010001")
     assert response.json() == [
@@ -170,7 +170,7 @@ def test_events_are_normalised(http: TestClient) -> None:
     ],
 )
 def test_malformed_events_are_rejected(http: TestClient, body: str) -> None:
-    response = http.post("/events", headers={"X-Choregos-Secret": SECRET}, content=body)
+    response = http.post("/events", headers={"X-Tranibor-Secret": SECRET}, content=body)
     assert response.status_code == 400
 
 
@@ -183,5 +183,5 @@ def test_events_without_a_configured_secret_are_refused() -> None:
         server_token=SecretStr(TOKEN),
     )
     with TestClient(build_app(settings), base_url=BASE, headers=BEARER) as client:
-        response = client.post("/events", headers={"X-Choregos-Secret": ""}, content=json.dumps(_event()))
+        response = client.post("/events", headers={"X-Tranibor-Secret": ""}, content=json.dumps(_event()))
     assert response.status_code == 401

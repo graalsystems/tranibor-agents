@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import pytest
 
-from choregos_servicenow.errors import Refused
-from choregos_servicenow.fake import parse_encoded
-from choregos_servicenow.query import Filter, Op, Query, escape_value, like
-from choregos_servicenow.tables import check_fields, check_table
+from tranibor_servicenow.errors import Refused
+from tranibor_servicenow.fake import parse_encoded
+from tranibor_servicenow.query import Filter, Op, Query, escape_value, like
+from tranibor_servicenow.tables import check_fields, check_table
 
 
 def test_typed_filters_are_encoded() -> None:

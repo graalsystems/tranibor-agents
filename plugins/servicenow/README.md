@@ -52,11 +52,11 @@ incidents share, the vague `INC0012399`.
 ## The matrix cases
 
 [`evals/matrix/`](evals/matrix) holds two cases of the core's tool-script matrix (S57-09), in the core's
-agent-case format (`choregos_playbooks.evals.agents`, the core's runbook
+agent-case format (`tranibor_playbooks.evals.agents`, the core's runbook
 `docs/runbooks/live-eval-matrix.md`), declared in `plugin.yaml`'s `contents.matrix_cases`
 (graalsystems/tranibor#1372): the core's eval matrix names them `plugin:servicenow/<file stem>` and
 plays each in two cells, `mcp` (the model calls the tools one by one) and `scripts` (it may call them from
-a script, `from choregos_tools import …`), judging it on its answer and on what its run did. Their
+a script, `from choregos_tools import …`: the generated client keeps that name in every core so far), judging it on its answer and on what its run did. Their
 connector is this plugin's server, `{kind: "plugin:servicenow/servicenow", scene: default}`.
 
 | Case | Scenario | What it asserts |
@@ -67,7 +67,7 @@ connector is this plugin's server, `{kind: "plugin:servicenow/servicenow", scene
 `tranibor plugin validate` checks them (their agent, their doors, their connector naming a server of
 this plugin) and `pack` ships them; the installer keeps them and never plays them. The server's file
 declares how the platform runs it on its fake, `fake: {env: {SERVICENOW_FAKE: "1"}, scenes: [default]}`:
-in a live cell, where the deployment sets `TRANIBOR_EVAL_FAKE_SCENES=1` (`CHOREGOS_EVAL_FAKE_SCENES` while the rename's window lasts), the platform runs beside the
+in a live cell, where the deployment sets `TRANIBOR_EVAL_FAKE_SCENES=1`, the platform runs beside the
 server an eval instance with exactly that variable and its own token, nothing of the configuration and no
 egress. In a scripted cell, the core reaches the server on a fake registered in its process (in the core's
 CI, a recording of this server's fake).
@@ -80,7 +80,7 @@ Three tests hold them here:
   server to its fake, with the platform's token, and no configuration field reaches it;
 - `server/tests/test_matrix_cases.py`, in the core's workspace (CI's `matrix` job), as the core's scripted
   matrix plays them: the cases found through this tree's `plugins/` as the offline plugins
-  (`TRANIBOR_PLUGINS_OFFLINE`, formerly `CHOREGOS_PLUGINS_OFFLINE`), this server's own app registered as the fake of `servicenow/servicenow`
+  (`TRANIBOR_PLUGINS_OFFLINE`), this server's own app registered as the fake of `servicenow/servicenow`
   (`use_fake_plugin_server`, started with the `fake` variables and the platform's token), each case in each
   of its cells through the core's real doors (`eval_doors.play`: the run's MCP server, and the script with
   `python3 -S`, the generated client and the tool bridge), then the core's judge; and the assertions that
@@ -116,7 +116,7 @@ Management API** for a change request's state, which its change model governs):
 | Tools | Access | Notes |
 |:--|:--|:--|
 | `search_records`, `get_record`, `get_journal`, `get_ci`, `list_ci_relations`, `search_knowledge`, `similar_incidents` | read | `search_knowledge`: published articles only; `similar_incidents`: resolved or closed in the last 90 days, same CI or same terms |
-| `add_work_note` | write | internal; idempotent through a `[choregos:<key>]` marker |
+| `add_work_note` | write | internal; idempotent through a `[tranibor:<key>]` marker (a note marked `[choregos:<key>]` by a version before 0.2.22 is found too) |
 | `update_record` | write | category, subcategory, impact, urgency, assignment group, assignee, CI — **never priority**; returns the previous values, its compensation restores them |
 | `add_comment` | write, **a person approves** | the caller sees it |
 | `resolve_incident` | write, **a person approves** | compensation: `reopen_incident` |
@@ -127,7 +127,8 @@ Management API** for a change request's state, which its change model governs):
 Every call but `GET /healthz` needs `Authorization: Bearer $TRANIBOR_SERVER_TOKEN`, the token the
 platform generates and presents (ADR 0094; an older core's `CHOREGOS_SERVER_TOKEN` is still read),
 compared in constant time; without the variable the server refuses to start. It also serves `GET /healthz` and `POST /events`, the webhook a ServiceNow Business Rule
-posts to through the platform (the shared secret in `X-Choregos-Secret`, compared in constant time; answers
+posts to through the platform (the shared secret in `X-Tranibor-Secret`, or `X-Choregos-Secret` from a rule
+installed before 0.2.22, compared in constant time; answers
 `[{kind, item_key, delivery_id}]` with `delivery_id = sys_id:sys_mod_count`).
 
 The rules it enforces before any call to ServiceNow:
@@ -146,6 +147,26 @@ The rules it enforces before any call to ServiceNow:
 Governance is the platform's: `servers/servicenow.yaml` lists every tool with its access, the three
 writes that always need a person, the compensations, and the only host the server may reach
 (`egress.from_fields: [base_url]`). A tool not listed there is refused by the platform.
+
+### The former name, `choregos` (core ADR 0226)
+
+From 0.2.22 the server writes the name `tranibor` in what it leaves on an instance, and still finds what an
+earlier version left there under the former name `choregos`, so that a replayed action stays one action:
+
+| What | Written | Still found |
+|:--|:--|:--|
+| A work note's idempotency marker | `[tranibor:<key>]` | `[choregos:<key>]` |
+| A status note's tag | `[tranibor-status:<marker>]` | `[choregos-status:<marker>]`, and the marker's twin (`choregos:status` or `tranibor:status`, as the core hands it) |
+| A created incident's or change's `correlation_id` | `tranibor:<key>` | `choregos:<key>` |
+| The Business Rule's secret header | the procedure's rule sends `X-Tranibor-Secret` | `X-Choregos-Secret`, read when the new one is absent or empty |
+
+Nothing already on an instance is rewritten. What an administrator created from an earlier procedure keeps
+its name and keeps working: the integration user `choregos.integration`, the role `choregos_integration`,
+the system properties `choregos.webhook_url` and `choregos.webhook_secret` and the Business Rule that reads
+them. A new instance is set up with the `tranibor` names (the procedure). The server package is
+`tranibor_servicenow` and its command `tranibor-servicenow`; the former import name `choregos_servicenow`
+and command `choregos-servicenow` stay as aliases for the core's window (a file that names
+`choregos_servicenow.app:build_app`, as the core's in-process demonstration does, keeps working).
 
 ## Configuration
 
@@ -187,7 +208,7 @@ variable is needed (a token is, or `TRANIBOR_SERVER_INSECURE_DEV=1`); the webhoo
 users, CIs and their relations, knowledge articles, journals and `sys_choice` rows of a JSON file, **in
 place of** the built-in seed above, so a demo shows its own incidents. Without the variable, the built-in
 seed is the instance. The format is documented at the top of
-[`seed_file.py`](server/src/choregos_servicenow/seed_file.py); every section is optional (`choices`
+[`seed_file.py`](server/src/tranibor_servicenow/seed_file.py); every section is optional (`choices`
 absent: the built-in states, impacts and priorities), names are checked against the file's own rows, dates
 are days before now so a seed never goes stale, and a mistake stops the server at start with the file, the
 entry and the reason. [`server/seeds/sample-company.json`](server/seeds/sample-company.json) is a complete
@@ -198,7 +219,7 @@ they do not run on a custom file.
 
 ```sh
 SERVICENOW_FAKE=1 SERVICENOW_FAKE_SEED=server/seeds/sample-company.json TRANIBOR_SERVER_INSECURE_DEV=1 \
-  uv run choregos-servicenow
+  uv run tranibor-servicenow
 docker run --rm -p 8080:8080 -e SERVICENOW_FAKE=1 -e TRANIBOR_SERVER_INSECURE_DEV=1 \
   -e SERVICENOW_FAKE_SEED=/seeds/demo.json -v "$PWD/demo.json:/seeds/demo.json:ro" <the server image>
 ```
@@ -211,7 +232,7 @@ instance (core #1372) runs the built-in seed. Only whoever starts the server on 
 ```sh
 cd plugins/servicenow/server
 uv sync --dev
-SERVICENOW_FAKE=1 TRANIBOR_SERVER_INSECURE_DEV=1 uv run choregos-servicenow   # http://localhost:8080/mcp
+SERVICENOW_FAKE=1 TRANIBOR_SERVER_INSECURE_DEV=1 uv run tranibor-servicenow   # http://localhost:8080/mcp
 curl localhost:8080/healthz
 uv run ruff check . && uv run ruff format --check . && uv run mypy --strict src && uv run pytest -q
 ```
@@ -220,8 +241,8 @@ Against a real instance (a Personal Developer Instance works):
 
 ```sh
 SERVICENOW_BASE_URL=https://dev12345.service-now.com SERVICENOW_AUTH=basic \
-SERVICENOW_USERNAME=choregos.integration SERVICENOW_PASSWORD=… \
-SERVICENOW_WEBHOOK_SECRET=… TRANIBOR_SERVER_TOKEN=… uv run choregos-servicenow
+SERVICENOW_USERNAME=tranibor.integration SERVICENOW_PASSWORD=… \
+SERVICENOW_WEBHOOK_SECRET=… TRANIBOR_SERVER_TOKEN=… uv run tranibor-servicenow
 ```
 
 ### The live suite
@@ -232,11 +253,11 @@ the triage writes and their compensations, a value the instance keeps silently, 
 uses and what their bound left out, a change request filed once and moved along its change model, a request
 item on `task`'s states. It is
 skipped without its variables (listed in `server/tests/live/conftest.py`); every record it files is tagged
-`[choregos-live <run>]` and deleted at the end when a cleanup user is given.
+`[tranibor-live <run>]` and deleted at the end when a cleanup user is given.
 
 ```sh
 TRANIBOR_LIVE_SERVICENOW_URL=https://dev12345.service-now.com \
-TRANIBOR_LIVE_SERVICENOW_USERNAME=choregos.integration TRANIBOR_LIVE_SERVICENOW_PASSWORD=… \
+TRANIBOR_LIVE_SERVICENOW_USERNAME=tranibor.integration TRANIBOR_LIVE_SERVICENOW_PASSWORD=… \
 TRANIBOR_LIVE_SERVICENOW_CLIENT_ID=… TRANIBOR_LIVE_SERVICENOW_CLIENT_SECRET=… \
 TRANIBOR_LIVE_SERVICENOW_CLEANUP_USERNAME=… TRANIBOR_LIVE_SERVICENOW_CLEANUP_PASSWORD=… \
   uv run pytest tests/live -q

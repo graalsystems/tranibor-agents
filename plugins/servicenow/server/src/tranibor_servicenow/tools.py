@@ -4,16 +4,21 @@
 Reads are bounded (`MAX_ROWS`) and name their fields. Writes are idempotent — replaying the same call
 leaves one effect — and return what a compensation needs to undo them:
 
-- `add_work_note` leaves a marker `[choregos:<key>]` in the note and does nothing if a note with the
-  marker exists (the key is the platform's `action_key`, or a hash of the text);
+- `add_work_note` leaves a marker `[tranibor:<key>]` in the note and does nothing if a note with the
+  marker exists (the key is the platform's `action_key`, or a hash of the text); a note written before
+  the core's ADR 0226, marked `[choregos:<key>]`, is found too;
 - `add_comment` does nothing if the same comment is already on the record;
 - `update_record` returns the previous values (its compensation writes them back, as JSON text since the
   platform renders a compensation's arguments to strings); `priority` is never written: ServiceNow
   computes it from impact and urgency;
 - `resolve_incident` returns the previous state (its compensation, `reopen_incident`, restores it);
-- `create_change_request` records `correlation_id = choregos:<key>` (the key is the platform's
+- `create_change_request` records `correlation_id = tranibor:<key>` (the key is the platform's
   `action_key`, else the agent's `correlation_id`, else a hash of the text) and returns the existing
-  change when one carries it.
+  change when one carries it, or the former `choregos:<key>`.
+
+The markers and correlation ids are written under the name `tranibor`, and the former name `choregos` is
+still found (the core's ADR 0226): a record an earlier version marked stays the same action's, and a
+replay finds it instead of writing twice. Neither is ever rewritten on the instance.
 
 Every text read from ServiceNow is third-party data (a caller wrote it): the tools return it as data and
 never act on it.
@@ -42,7 +47,7 @@ from .tables import (
 )
 
 _DATE = "%Y-%m-%d %H:%M:%S"
-log = structlog.get_logger("choregos_servicenow.tools")
+log = structlog.get_logger("tranibor_servicenow.tools")
 _MARKER = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
 _STOPWORDS = frozenset(
     {
@@ -65,10 +70,32 @@ def text_key(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:16]
 
 
+#: The name the server writes in its markers and correlation ids, and the former one it still finds there
+#: (the core's ADR 0226: written before, kept on the instance).
+NAME, FORMER_NAME = "tranibor", "choregos"
+
+
 def marker_of(key: str) -> str:
+    """`[tranibor:<key>]`, the marker the server writes."""
+    return markers_of(key)[0]
+
+
+def markers_of(key: str) -> tuple[str, str]:
+    """`([tranibor:<key>], [choregos:<key>])`: the marker written, and its former form, still found."""
     if not _MARKER.match(key):
         raise Refused("an action key is 1-80 characters among letters, digits and . _ : -")
-    return f"[choregos:{key}]"
+    return f"[{NAME}:{key}]", f"[{FORMER_NAME}:{key}]"
+
+
+def correlations_of(key: str) -> tuple[str, str]:
+    """`(tranibor:<key>, choregos:<key>)`: the `correlation_id` written, and its former form, still found."""
+    markers_of(key)
+    return f"{NAME}:{key}", f"{FORMER_NAME}:{key}"
+
+
+def find_correlated(table: str, key: str) -> Query:
+    """The query of a record created for `key`, under the correlation id written or its former form."""
+    return Query(table).where(Filter(field="correlation_id", op=Op.in_, value=list(correlations_of(key))))
 
 
 def _fields_object(fields: dict[str, str] | str) -> dict[str, str]:
@@ -389,10 +416,11 @@ class ServiceNowTools:
         check_sys_id(sys_id)
         if not text.strip():
             raise Refused("a work note cannot be empty")
-        marker = marker_of(action_key or text_key(table, sys_id, text))
+        marker, former = markers_of(action_key or text_key(table, sys_id, text))
         existing = await self.journal_entries(table, sys_id, ("work_notes",), MAX_ROWS)
-        if any(marker in str(entry["value"]) for entry in existing):
-            return {"table": table, "sys_id": sys_id, "written": False, "marker": marker}
+        for found in (marker, former):
+            if any(found in str(entry["value"]) for entry in existing):
+                return {"table": table, "sys_id": sys_id, "written": False, "marker": found}
         await self.client.update(table, sys_id, {"work_notes": f"{text}\n\n{marker}"})
         return {"table": table, "sys_id": sys_id, "written": True, "marker": marker}
 
@@ -515,11 +543,8 @@ class ServiceNowTools:
             if value:
                 check_sys_id(value)
         key = action_key or correlation_id or text_key(short_description, description, implementation_plan)
-        marker_of(key)
-        correlation = f"choregos:{key}"
-        existing = await self.client.find_one(
-            "change_request", Query("change_request").where(eq("correlation_id", correlation))
-        )
+        correlation = correlations_of(key)[0]
+        existing = await self.client.find_one("change_request", find_correlated("change_request", key))
         values: dict[str, Any] = {
             "short_description": short_description,
             "description": description,
@@ -536,6 +561,7 @@ class ServiceNowTools:
             values["assignment_group"] = assignment_group
         if existing is not None:
             # A replay says what the first call's record lacks too: the agent reads the answer it gets.
-            return {"created": False, "correlation_id": correlation, "record": existing, **unkept(existing, values)}
+            kept = str(existing["fields"].get("correlation_id") or correlation)
+            return {"created": False, "correlation_id": kept, "record": existing, **unkept(existing, values)}
         record = await self.client.create("change_request", values)
         return {"created": True, "correlation_id": correlation, "record": record, **unkept(record, values)}

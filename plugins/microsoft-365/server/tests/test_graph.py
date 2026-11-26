@@ -8,8 +8,8 @@ from typing import Any
 import httpx
 import pytest
 
-from choregos_microsoft_365.errors import Failure
-from choregos_microsoft_365.graph import Graph
+from tranibor_microsoft_365.errors import Failure
+from tranibor_microsoft_365.graph import Graph
 
 TOKEN = "the-persons-token"
 

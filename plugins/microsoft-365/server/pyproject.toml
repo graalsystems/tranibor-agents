@@ -1,6 +1,6 @@
 [project]
-name = "choregos-microsoft-365"
-version = "0.1.1"
+name = "tranibor-microsoft-365"
+version = "0.1.2"
 description = "MCP server for Microsoft 365 (Microsoft Graph, delegated permissions only), governed by Tranibor."
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
@@ -14,7 +14,9 @@ dependencies = [
 ]
 
 [project.scripts]
-choregos-microsoft-365 = "choregos_microsoft_365.app:main"
+tranibor-microsoft-365 = "tranibor_microsoft_365.app:main"
+# The former command, for the window of the core's ADR 0226 (a script or a runbook may still run it).
+choregos-microsoft-365 = "tranibor_microsoft_365.app:main"
 
 [dependency-groups]
 dev = [
@@ -32,7 +34,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/choregos_microsoft_365"]
+# `choregos_microsoft_365` is the former import name, an alias of the package (src/choregos_microsoft_365).
+packages = ["src/tranibor_microsoft_365", "src/choregos_microsoft_365"]
 
 [tool.ruff]
 line-length = 120

@@ -7,8 +7,8 @@ import json
 
 import pytest
 
-from choregos_microsoft_365.fake import ALEX, CALENDAR_ONLY, CAMILLE, EXPIRED, ROOM, SAM
-from choregos_microsoft_365.tools import SNIPPET_CHARS
+from tranibor_microsoft_365.fake import ALEX, CALENDAR_ONLY, CAMILLE, EXPIRED, ROOM, SAM
+from tranibor_microsoft_365.tools import SNIPPET_CHARS
 
 from .conftest import PERSON, Mcp
 

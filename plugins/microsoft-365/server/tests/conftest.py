@@ -8,16 +8,16 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
-from choregos_microsoft_365.app import USER_TOKEN_HEADER, build_app
-from choregos_microsoft_365.config import Settings
-from choregos_microsoft_365.fake import FakeGraph
+from tranibor_microsoft_365.app import USER_TOKEN_HEADER, build_app
+from tranibor_microsoft_365.config import Settings
+from tranibor_microsoft_365.fake import FakeGraph
 
 #: The fake tenant is seeded relative to this hour.
 NOW = datetime(2026, 11, 14, 9, 17, tzinfo=UTC)
 TOKEN = "platform-token-for-tests"
 PERSON = "a-persons-graph-token"
 #: The Host the platform's Service gives the server: not localhost, and accepted.
-BASE = "http://microsoft-365.choregos-plugins.svc:8080"
+BASE = "http://microsoft-365.tranibor-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
 
 

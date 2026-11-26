@@ -12,7 +12,7 @@ Its redirect URIs are https and end with the platform's consent callback; implic
 Usage, on the application as Entra holds it (`az ad app show --id <client id> > app.json`, or the manifest
 downloaded from the portal, which has the same `requiredResourceAccess`)::
 
-    python -m choregos_microsoft_365.entra --stage 3 app.json
+    python -m tranibor_microsoft_365.entra --stage 3 app.json
 
 It prints each problem and exits 1, or prints `ok` and exits 0.
 """

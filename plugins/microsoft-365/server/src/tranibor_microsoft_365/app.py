@@ -5,7 +5,7 @@ Two tokens, two jobs:
 
 - `Authorization: Bearer $TRANIBOR_SERVER_TOKEN` authenticates the platform (ADR 0094). Every path but
   `/healthz` needs it; the comparison is constant-time.
-- `X-Choregos-User-Token` is the token of the person the call is made for: the platform's connected
+- `X-Tranibor-User-Token` is the token of the person the call is made for: the platform's connected
   account of that person (`user_consent`, the core's ADR 0135), drawn for this call only. It is the only
   credential the server ever sends to Microsoft Graph. A tool call without it fails with
   `identity_unavailable` before anything is sent: the server has no identity of its own. Listing the tools
@@ -41,10 +41,14 @@ from .graph import Graph
 from .tools import Chats, Events, Mail, Tools
 
 HEALTH_PATH = "/healthz"
-USER_TOKEN_HEADER = "X-Choregos-User-Token"  # noqa: S105 - a header name
+USER_TOKEN_HEADER = "X-Tranibor-User-Token"  # noqa: S105 - a header name
+#: The header the person's token comes in, then its former name (the core's ADR 0226): a core before 0.30.0
+#: sends only `X-Choregos-User-Token`, the 0.30.0 core both. The new one is read first, as the core reads
+#: its own headers.
+USER_TOKEN_HEADERS = (USER_TOKEN_HEADER, "X-Choregos-User-Token")
 MAX_USER_TOKEN = 16 * 1024
 
-log = structlog.get_logger("choregos_microsoft_365")
+log = structlog.get_logger("tranibor_microsoft_365")
 
 INSTRUCTIONS = (
     "Microsoft 365 through Microsoft Graph, read as the person the call is made for, with their delegated "
@@ -89,8 +93,9 @@ def configure_logging() -> None:
 
 
 def user_token(headers: Mapping[str, str] | None) -> str:
-    """The person's token, from `X-Choregos-User-Token`; `identity_unavailable` without a usable one."""
-    value = headers.get(USER_TOKEN_HEADER) if headers is not None else None
+    """The person's token, from `X-Tranibor-User-Token` (else the former `X-Choregos-User-Token`);
+    `identity_unavailable` without a usable one."""
+    value = next((headers.get(name) for name in USER_TOKEN_HEADERS if headers and headers.get(name)), None)
     words = (value or "").split()
     if words and words[0].lower() == "bearer":  # the raw token is expected; a `Bearer` prefix is tolerated
         words = words[1:]

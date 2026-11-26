@@ -3,8 +3,8 @@ id: connector.mcp.microsoft-365
 title: Connect Microsoft 365, read as each person
 applies_to: {connector: mcp/microsoft-365}
 audience: org_admin
-version: 1
-reviewed: 2026-11-14
+version: 2
+reviewed: 2026-11-26
 vendor_docs:
   - {title: "Register an application in Microsoft Entra ID", url: "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app"}
   - {title: "Add and manage application credentials", url: "https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials"}
@@ -38,7 +38,9 @@ fields:
 ## At Microsoft Entra
 
 1. **Register the application.** Entra admin center, Identity, Applications, App registrations, **New
-   registration**: name `choregos-microsoft-365`, supported account types **Accounts in this
+   registration**: name `tranibor-microsoft-365` (an application registered from an earlier version of this
+   page as `choregos-microsoft-365` keeps its name: the name is only a label, nothing reads it), supported
+   account types **Accounts in this
    organizational directory only** (single tenant). Redirect URI: platform **Web**,
    `{{api_url}}/api/v1/me/connected-accounts/callback`. Register.
 2. **Copy two ids** from its Overview: the Application (client) ID and the Directory (tenant) ID.
@@ -57,7 +59,7 @@ fields:
 8. **Check it automatically.** With the Azure CLI, export the application as Entra holds it and run the
    plugin's check for your stage, from the plugin's `server/` directory:
    `az ad app show --id <client id> > app.json`, then
-   `uv run python -m choregos_microsoft_365.entra --stage 2 app.json`. It prints `ok`, or each permission,
+   `uv run python -m tranibor_microsoft_365.entra --stage 2 app.json`. It prints `ok`, or each permission,
    redirect URI or setting that breaks the stage's rules. The plugin's `server/entra/stage-2.json` and
    `stage-3.json` are the reference applications.
 

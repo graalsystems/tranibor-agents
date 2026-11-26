@@ -14,8 +14,8 @@ import pytest
 import yaml
 from starlette.testclient import TestClient
 
-from choregos_microsoft_365.app import build_app
-from choregos_microsoft_365.config import Settings
+from tranibor_microsoft_365.app import build_app
+from tranibor_microsoft_365.config import Settings
 
 from .conftest import Mcp
 

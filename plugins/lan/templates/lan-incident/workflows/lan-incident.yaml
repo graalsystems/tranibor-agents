@@ -19,7 +19,7 @@ metadata:
   inputs:
     type: object
     properties:
-      site: { type: string, title: Site (optional), maxLength: 200, description: The site the complaint is about, by name or id }
+      site: { type: string, title: Site (optional), maxLength: 200, description: "The site the complaint is about, by name or id"}
 initial: queue
 actors:
   steward: { type: agent, role: diagnose, agent: lan-steward, model: "profile:standard", max_turns: 30, max_minutes: 15 }

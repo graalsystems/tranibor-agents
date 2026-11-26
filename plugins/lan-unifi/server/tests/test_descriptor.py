@@ -77,3 +77,16 @@ def test_the_declared_fake_is_what_switches_the_server_to_its_fake_and_no_admini
         assert client.get("/healthz").json()["fake"] is True
     with pytest.raises(ValueError, match="UNIFI_"):
         build_app(Settings.from_env({"TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}))
+
+
+def test_the_descriptor_schemas_are_the_profile_s() -> None:
+    """The validator proves acceptance; this pins the stronger fact that the server's schemas are copies."""
+    profile = yaml.safe_load((ROOT.parent / "lan" / "profiles" / "lan.yaml").read_text())
+    operations = {op["name"]: op for op in descriptor()["operations"]}
+    for tool in profile["tools"]:
+        declared = operations[tool["name"]]
+        for ours, theirs in (("input_schema", "input"), ("output_schema", "output")):
+            schema = {k: v for k, v in declared[ours].items() if k != "$defs"}
+            assert schema == tool[theirs], (tool["name"], ours)
+            for name, body in declared[ours].get("$defs", {}).items():
+                assert body == profile["$defs"][name], (tool["name"], ours, name)

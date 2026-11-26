@@ -77,25 +77,439 @@ egress:
 # Integration API has no such call: they answer `not_supported` and `get_provider` lists them. Their governance
 # is declared all the same, so that a future API change does not lower it.
 operations:
-  - {name: get_provider, access: read}
-  - {name: list_sites, access: read}
-  - {name: list_devices, access: read}
-  - {name: get_device, access: read}
-  - {name: get_device_statistics, access: read}
-  - {name: list_clients, access: read}
-  - {name: get_client, access: read}
-  - {name: list_networks, access: read}
-  - {name: list_wlans, access: read}
-  - {name: firmware_status, access: read}
-
+  - name: get_provider
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    output_schema:
+      $ref: '#/$defs/provider'
+      $defs:
+        provider:
+          type: object
+          required:
+          - instance
+          - provider
+          - sites
+          - unsupported_tools
+          properties:
+            instance:
+              type: string
+              description: The name of this instance of the server (its connector name).
+            provider:
+              type: string
+              description: The provider, the vendor or product family behind the instance.
+            sites:
+              type: array
+              items:
+                $ref: '#/$defs/site'
+            unsupported_tools:
+              type: array
+              items:
+                type: string
+              description: Profile tools this server answers `not_supported`; an agent does not propose them.
+        site: &id001
+          type: object
+          required:
+          - id
+          - name
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+  - name: list_sites
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    output_schema:
+      type: object
+      required:
+      - sites
+      properties:
+        sites:
+          type: array
+          items:
+            $ref: '#/$defs/site'
+      $defs:
+        site: *id001
+  - name: list_devices
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      properties:
+        site_id:
+          type: string
+        state:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - truncated
+      - devices
+      properties:
+        site_id:
+          type: string
+        truncated:
+          type: boolean
+          description: True when more devices exist than are listed.
+        devices:
+          type: array
+          items:
+            $ref: '#/$defs/device'
+      $defs:
+        device: &id002
+          type: object
+          required:
+          - id
+          - name
+          - model
+          - state
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            model:
+              type: string
+            state:
+              type: string
+            firmware_version:
+              type:
+              - string
+              - 'null'
+  - name: get_device
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - device_id
+      properties:
+        site_id:
+          type: string
+        device_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - device
+      - ports
+      properties:
+        site_id:
+          type: string
+        device:
+          $ref: '#/$defs/device'
+        ports:
+          type: array
+          items:
+            type: object
+            required:
+            - idx
+            properties:
+              idx:
+                type: integer
+                description: The port number, the argument of power_cycle_port.
+        radios:
+          type: array
+          items:
+            type: object
+      $defs:
+        device: *id002
+  - name: get_device_statistics
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - device_id
+      properties:
+        site_id:
+          type: string
+        device_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - device_id
+      properties:
+        site_id:
+          type: string
+        device_id:
+          type: string
+  - name: list_clients
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      properties:
+        site_id:
+          type: string
+        type:
+          type: string
+          description: WIRED, WIRELESS or another type the provider has.
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - truncated
+      - clients
+      properties:
+        site_id:
+          type: string
+        truncated:
+          type: boolean
+        clients:
+          type: array
+          items:
+            $ref: '#/$defs/client'
+      $defs:
+        client: &id003
+          type: object
+          required:
+          - id
+          - name
+          - type
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            type:
+              type: string
+            uplink_device_id:
+              type:
+              - string
+              - 'null'
+  - name: get_client
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - client_id
+      properties:
+        site_id:
+          type: string
+        client_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - client
+      properties:
+        site_id:
+          type: string
+        client:
+          $ref: '#/$defs/client'
+      $defs:
+        client: *id003
+  - name: list_networks
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      properties:
+        site_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - networks
+      properties:
+        site_id:
+          type: string
+        networks:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - name
+            - vlan_id
+            - enabled
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              vlan_id:
+                type: integer
+              enabled:
+                type: boolean
+  - name: list_wlans
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      properties:
+        site_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - wlans
+      properties:
+        site_id:
+          type: string
+        wlans:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - name
+            - enabled
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              enabled:
+                type: boolean
+  - name: firmware_status
+    access: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      properties:
+        site_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - devices_examined
+      - updatable
+      - offline
+      - by_model
+      properties:
+        site_id:
+          type: string
+        devices_examined:
+          type: integer
+        updatable:
+          type: array
+          items:
+            $ref: '#/$defs/device'
+        offline:
+          type: array
+          items:
+            $ref: '#/$defs/device'
+        by_model:
+          type: array
+          items:
+            type: object
+            required:
+            - model
+            - devices
+            properties:
+              model:
+                type: string
+              devices:
+                type: integer
+      $defs:
+        device: *id002
   - name: restart_device
     access: write
     human_approval: true
     description: Restarts an adopted device; its clients, and whatever hangs on it, lose connection for minutes. No undo.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - device_id
+      properties:
+        site_id:
+          type: string
+        device_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - action
+      - target
+      properties:
+        site_id:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+          description: The device id.
+        target_name:
+          type:
+          - string
+          - 'null'
+        previous_state:
+          type:
+          - string
+          - 'null'
   - name: power_cycle_port
     access: write
     human_approval: true
     description: Cuts and restores the PoE power of one switch port. Refused when the port has no PoE. No undo.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - device_id
+      - port_idx
+      properties:
+        site_id:
+          type: string
+        device_id:
+          type: string
+        port_idx:
+          type: integer
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - action
+      - target
+      properties:
+        site_id:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+          description: The device id and port.
+        target_name:
+          type:
+          - string
+          - 'null'
+        previous_state:
+          type:
+          - string
+          - 'null'
   - name: block_client
     access: write
     human_approval: true
@@ -103,20 +517,86 @@ operations:
     compensation:
       operation: unblock_client
       arguments:
-        site_id: "{{ result.site_id }}"
-        client_id: "{{ result.client_id }}"
+        site_id: '{{ result.site_id }}'
+        client_id: '{{ result.client_id }}'
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - client_id
+      properties:
+        site_id:
+          type: string
+        client_id:
+          type: string
+    output_schema:
+      $ref: '#/$defs/client_block'
+      $defs:
+        client_block: &id004
+          type: object
+          required:
+          - site_id
+          - client_id
+          - blocked
+          properties:
+            site_id:
+              type: string
+            client_id:
+              type: string
+            blocked:
+              type: boolean
   - name: unblock_client
     access: write
     description: Not supported by UniFi's official API (answers not_supported). Compensated by blocking the client again.
     compensation:
       operation: block_client
       arguments:
-        site_id: "{{ result.site_id }}"
-        client_id: "{{ result.client_id }}"
+        site_id: '{{ result.site_id }}'
+        client_id: '{{ result.client_id }}'
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - client_id
+      properties:
+        site_id:
+          type: string
+        client_id:
+          type: string
+    output_schema:
+      $ref: '#/$defs/client_block'
+      $defs:
+        client_block: *id004
   - name: upgrade_firmware
     access: write
     human_approval: true
     description: Not supported by UniFi's official API (answers not_supported). A real upgrade restarts the device. No undo.
+    input_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - site_id
+      - device_id
+      properties:
+        site_id:
+          type: string
+        device_id:
+          type: string
+    output_schema:
+      type: object
+      required:
+      - site_id
+      - device_id
+      - accepted
+      properties:
+        site_id:
+          type: string
+        device_id:
+          type: string
+        accepted:
+          type: boolean
 
   # UniFi-only extras: agents of the `lan` profile never see them (an agent names profile tools).
   - {name: get_info, access: read}

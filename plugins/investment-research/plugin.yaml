@@ -5,14 +5,15 @@
 # the procedures of the `marketdata` connector types. The CODE half stays in the core repository: the
 # extension `tranibor-investment-research`, which ships the `marketdata` connector family and is
 # installed in the platform's published API and worker images, and the `investment-research` job image,
-# built by the core's release, which runs `choregos-quant`. The plugin names the extension it needs
+# built by the core's release, which runs `choregos-quant` (the command every supported core's image has;
+# `tranibor-quant` beside it from 0.30.0). The plugin names the extension it needs
 # (`requires.extensions`, from core 0.28.1); the format has no field naming a job image: the template's job
 # steps name the image (`image: investment-research`) and the operator maps it (README.md).
 apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: investment-research
-  version: 0.1.4
+  version: 0.1.5
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-
@@ -28,8 +29,8 @@ metadata:
 requires:
   plugins: []
   connectors: {}
-  # The extension that ships the `marketdata` connector family: the `choregos.plugins` entry point of the
-  # core's `tranibor-investment-research` wheel.
+  # The extension that ships the `marketdata` connector family: the plugins entry point of the core's
+  # `tranibor-investment-research` wheel.
   extensions: [investment-research]
   # The organisation connector the template's snapshot job calls, by name, and its capability (as the
   # template declares it); its connector types come from the extension `tranibor-investment-research`.

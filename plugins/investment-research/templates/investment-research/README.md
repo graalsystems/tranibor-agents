@@ -61,7 +61,11 @@ The sandbox is closed (`preset:regulated`): no agent and no job reaches the inte
   `image: investment-research`: they run in the `investment-research` job image,
   `ghcr.io/graalsystems/tranibor-investment-research:<core version>`, which the core's release builds
   FROM that release's runner image and which carries `choregos-quant`. The operator maps the name to
-  the image: `TRANIBOR_JOB_IMAGES` (`CHOREGOS_JOB_IMAGES` is still read), or the chart's `global.images.jobs.investment-research`.
+  the image: `TRANIBOR_JOB_IMAGES`, or the chart's `global.images.jobs.investment-research`.
+- **The job command keeps its name.** The steps run `choregos-quant`, the only name the job image of a core
+  before 0.30.0 has (the plugin supports `>=0.28.1`); from 0.30.0 the image has `tranibor-quant` beside it.
+  The default anonymisation `seed` stays `choregos` too: it is an input to the hash that names the products,
+  and a new value would rename every product of a campaign compared with an earlier one.
 - **The extension.** The organisation connector `marketdata` is a connector type of the plugin's
   extension `tranibor-investment-research`, installed in the platform's published API and worker
   images; this template ships no code.

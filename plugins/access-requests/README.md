@@ -6,7 +6,7 @@ one; the people a write belongs to decide it.
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `access-requests` 0.2.0, core `>=0.28.0,<1.0.0` (0.1.0 stays for older cores) |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `access-requests` 0.2.1, core `>=0.28.0,<1.0.0` (0.1.0 stays for older cores) |
 | Template | [`templates/access-requests`](templates/access-requests/README.md) | requests from a trigger (any sender that posts JSON), internal tracker |
 | Tests | [`tests/`](tests/test_template.py) | this template and its Microsoft 365 twin played against a core checkout (below) |
 
@@ -133,5 +133,5 @@ cd <core checkout> && uv sync --frozen
 uv run --frozen pytest -q -p no:cacheprovider <this repo>/plugins/access-requests/tests
 ```
 
-CI's `templates` job runs it at `CHOREGOS_REF`: it needs the core with ADRs 0196 and 0197, so that pin
+CI's `templates` job runs it at `TRANIBOR_REF`: it needs the core with ADRs 0196 and 0197, so that pin
 moves with the core release that ships them.

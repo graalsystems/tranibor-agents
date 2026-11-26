@@ -7,7 +7,7 @@ person decides on each product and on the campaign. A research note for internal
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `investment-research` 0.1.4, core `>=0.28.1,<1.0.0`, `requires.extensions: [investment-research]` |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `investment-research` 0.1.5, core `>=0.28.1,<1.0.0`, `requires.extensions: [investment-research]` |
 | Template | [`templates/investment-research`](templates/investment-research/README.md) | 0.2.0: the `campaign` and `product-memo` workflows, the agents `quant-strategist` and `quant-analyst`, the skills `strategy-grammar` and `reading-metrics`, its eval cases |
 | Procedures | [`procedures/`](procedures) | the `marketdata` connector types: `stooq`, `yahoo`, `alphavantage`, `tiingo`, `composite` |
 
@@ -24,7 +24,8 @@ research trade out of the core into a unit of its own. It has two halves:
 - **The code, in the core repository.** The extension `tranibor-investment-research`, which ships the
   `marketdata` connector family and is installed in the platform's published API and worker images; and
   the `investment-research` job image, `ghcr.io/graalsystems/tranibor-investment-research:<core version>`,
-  which the core's release builds FROM that release's runner image and which carries `choregos-quant`.
+  which the core's release builds FROM that release's runner image and which carries `choregos-quant` (and,
+  from core 0.30.0, the same command as `tranibor-quant`).
 
 The plugin format has no field that names an extension or a job image, so `plugin.yaml` declares neither;
 it declares the organisation connector the template calls (`requires.org_connectors: {marketdata:
@@ -35,7 +36,7 @@ marketdata}`), which the installer does not enforce.
 1. **Install the plugin** from the `tranibor` source (Catalogue, **Plugins**, or the deployment's
    `defaultPlugins`, see the [root README](../../README.md#installing)). Projects are created from the
    template `plugin:investment-research/investment-research`.
-2. **Map the job image.** `TRANIBOR_JOB_IMAGES` (`CHOREGOS_JOB_IMAGES` is still read during the rename window; or the chart's
+2. **Map the job image.** `TRANIBOR_JOB_IMAGES` (or the chart's
    `global.images.jobs.investment-research`) maps `investment-research` to
    `ghcr.io/graalsystems/tranibor-investment-research:<core version>`. On a core older than the one whose
    release builds that image, map it to that core's runner image, which still carries `choregos-quant`.
@@ -47,5 +48,5 @@ marketdata}`), which the installer does not enforce.
 
 ```sh
 tranibor plugin validate plugins/investment-research
-tranibor plugin pack plugins/investment-research -o investment-research-0.1.4.tar.gz   # same bytes every time
+tranibor plugin pack plugins/investment-research -o investment-research-0.1.5.tar.gz   # same bytes every time
 ```

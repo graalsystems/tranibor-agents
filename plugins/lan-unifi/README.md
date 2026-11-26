@@ -42,11 +42,16 @@ a clear reason): 100 requests per minute per console (the server keeps to 80 and
 server gives up at 20 s: `timeout`), 10 MB per response (`response_too_large`: ask for a smaller page).
 The Site Manager's own listing (`cloud_firmware_status`) is a separate budget on the same key.
 
-Not verified against a real console: the two official documents disagree on the path. The Site Manager API
-(the connector) says the path after the console id is proxied to `/proxy/<path>` and gives
-`.../consoles/{id}/network/integration/v1/sites` as its example, which is what is implemented; the Network API
-11.0.97 document names its cloud server `.../consoles/{consoleId}/proxy/network/integration`. The prefix is the
-one constant `Controller` builds in `client.py`; the live suite (`tests/live`, `TRANIBOR_LIVE_UNIFI_*`) settles it.
+**The path settles itself.** The two official documents disagree on whether the connector adds `/proxy`: the Site
+Manager API proxies `<id>/<path>` to `/proxy/<path>` (example `.../network/integration/v1/sites`), the Network
+API 11.0.97 names its cloud server `.../consoles/{consoleId}/proxy/network/integration`. On the first call of an
+instance the server probes, read-only, `GET <connector>/network/integration/v1/info`; on a 404,
+`GET <connector>/proxy/network/integration/v1/info`. The prefix that answers 200 is kept for the life of the
+process and logged (the prefix only, never a key). No write is ever sent before it is known. If neither answers,
+the call fails `not_found` naming both paths tried (the usual causes: wrong `console_id`, console offline or on
+firmware older than 5.0.3, a personal key that is not the console owner's). Any other answer to the probe (a
+401, a 403) is reported as such, not taken for a missing path. Still unproven against a real console; the live
+suite (`tests/live`, `TRANIBOR_LIVE_UNIFI_CONSOLE_ID`) logs which prefix answered.
 
 ## Connector
 

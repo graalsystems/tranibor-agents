@@ -107,7 +107,7 @@ them twice. Voucher codes and Wi-Fi passphrases are never returned by a read too
    devices, their state and firmware.
 2. A `401` is the key; a `403` is the account's role; a TLS error is the certificate (`ca_certificate`);
    a timeout is the network path (egress, firewall) between the platform and the console. On the cloud
-   connection a `404` is also a wrong `console_id`, a console that is offline or on firmware older than 5.0.3,
+   connection a `404` naming both paths tried (`<connector>/network/integration/v1/info` and `<connector>/proxy/...`; the server probes both on its first call and keeps the one that answers) is a wrong `console_id`, a console that is offline or on firmware older than 5.0.3,
    or a key (personal) that is not its owner's; `timeout` is the connector's 25 s; `rate_limited` is the
    100 requests a minute per console (wait a minute); `response_too_large` is the 10 MB limit.
 3. The first write is yours: approve one restart of an access point in a quiet hour, and watch it come back.

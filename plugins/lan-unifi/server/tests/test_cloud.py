@@ -27,7 +27,10 @@ ENV = {
 
 
 def cloud(throttle: Throttle | None = None) -> Controller:
-    return Controller(CLOUD, KEY, console_id=CONSOLE, throttle=throttle)
+    """With the prefix already known: the probe has its own tests below."""
+    controller = Controller(CLOUD, KEY, console_id=CONSOLE, throttle=throttle)
+    controller.prefix = "/network/integration"
+    return controller
 
 
 @respx.mock
@@ -148,3 +151,58 @@ async def test_the_tools_reach_the_console_only_through_api_ui_com_in_cloud_mode
     assert fake.calls
     prefix = f"/v1/connector/consoles/{FAKE_CONSOLE_ID}/network/integration/v1/"
     assert all(path.startswith(prefix) for _, path, _ in fake.calls)
+
+
+CONNECTOR = f"{CLOUD}/v1/connector/consoles/{CONSOLE}"
+DIRECT, PROXIED = f"{CONNECTOR}/network/integration", f"{CONNECTOR}/proxy/network/integration"
+PAGE = {"offset": 0, "limit": 200, "count": 0, "totalCount": 0, "data": []}
+
+
+@respx.mock
+async def test_the_first_call_probes_info_without_proxy_and_keeps_that_prefix() -> None:
+    direct = respx.get(f"{DIRECT}/v1/info").mock(return_value=httpx.Response(200, json={}))
+    other = respx.get(f"{PROXIED}/v1/info").mock(return_value=httpx.Response(200, json={}))
+    sites = respx.get(f"{DIRECT}/v1/sites").mock(return_value=httpx.Response(200, json=PAGE))
+    controller = Controller(CLOUD, KEY, console_id=CONSOLE)
+    await controller.collect("/v1/sites")
+    await controller.collect("/v1/sites")
+    assert (direct.call_count, other.call_count, sites.call_count) == (1, 0, 2)
+    assert controller.prefix == "/network/integration"
+
+
+@respx.mock
+async def test_a_404_on_the_first_path_probes_the_proxy_path_and_keeps_it(caplog: pytest.LogCaptureFixture) -> None:
+    direct = respx.get(f"{DIRECT}/v1/info").mock(return_value=httpx.Response(404))
+    proxied = respx.get(f"{PROXIED}/v1/info").mock(return_value=httpx.Response(200, json={}))
+    sites = respx.get(f"{PROXIED}/v1/sites").mock(return_value=httpx.Response(200, json=PAGE))
+    controller = Controller(CLOUD, KEY, console_id=CONSOLE)
+    with caplog.at_level("INFO", logger="tranibor_lan_unifi.client"):
+        await controller.collect("/v1/sites")
+        await controller.collect("/v1/sites")
+    assert (direct.call_count, proxied.call_count, sites.call_count) == (1, 1, 2)
+    assert controller.prefix == "/proxy/network/integration"
+    assert "/proxy/network/integration" in caplog.text and KEY not in caplog.text
+
+
+@respx.mock
+async def test_neither_path_answering_is_a_typed_error_naming_both_and_nothing_else_is_sent() -> None:
+    respx.get(f"{DIRECT}/v1/info").mock(return_value=httpx.Response(404))
+    respx.get(f"{PROXIED}/v1/info").mock(return_value=httpx.Response(404))
+    write = respx.post(url__regex=r".*").mock(return_value=httpx.Response(200, json={}))
+    controller = Controller(CLOUD, KEY, console_id=CONSOLE)
+    with pytest.raises(Failure) as failure:
+        await controller.request("POST", f"/v1/sites/{SITE}/devices/x/actions", body={"action": "RESTART"})
+    assert failure.value.code == "not_found"
+    assert "/network/integration/v1/info" in str(failure.value)
+    assert "/proxy/network/integration/v1/info" in str(failure.value)
+    assert KEY not in str(failure.value)
+    assert write.call_count == 0 and controller.prefix is None
+
+
+@respx.mock
+async def test_a_401_on_the_probe_is_not_a_missing_path() -> None:
+    respx.get(f"{DIRECT}/v1/info").mock(return_value=httpx.Response(401))
+    proxied = respx.get(f"{PROXIED}/v1/info").mock(return_value=httpx.Response(200, json={}))
+    with pytest.raises(Failure) as failure:
+        await Controller(CLOUD, KEY, console_id=CONSOLE).get("/v1/sites")
+    assert failure.value.code == "unauthorized" and proxied.call_count == 0

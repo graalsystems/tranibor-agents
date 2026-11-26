@@ -6,7 +6,8 @@ key is ever logged or put in an error.
   header `X-API-KEY`, pages `{offset, limit, count, totalCount, data}` (`limit` at most 200).
   Reference: the OpenAPI document of Network 11.0.97 published at https://developer.ui.com/network/.
   Through the official cloud connector (`console_id` given) the same paths are served by
-  `https://api.ui.com/v1/connector/consoles/<id>/network/integration/...`, header `X-API-Key` (a Site Manager
+  `https://api.ui.com/v1/connector/consoles/<id>/network/integration/...` (or `.../proxy/network/integration/...`:
+  the two official documents disagree, so the first call probes both, read-only: see `_resolve_prefix`), header `X-API-Key` (a Site Manager
   key); the connector proxies to the console's `http://127.0.0.1/proxy/<path>`. Its limits (Site Manager API
   v1.0.0): 100 requests per minute per console, 25 s per request, 10 MB per response, console firmware
   >= 5.0.3. They are kept under client-side: see `Throttle`, `CLOUD_TIMEOUT_S`, `CLOUD_BODY_MAX`.
@@ -18,6 +19,7 @@ key is ever logged or put in an error.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import ssl
 import time
@@ -40,6 +42,9 @@ CLOUD_RATE_PER_MIN = 80
 CLOUD_MAX_WAIT_S = 20.0
 #: The connector refuses an upstream body above 10 MB.
 CLOUD_BODY_MAX = 10 * 1024 * 1024
+#: The two official documents disagree on whether the connector adds `/proxy` itself, so the first call settles it.
+CLOUD_PREFIXES = ("/network/integration", "/proxy/network/integration")
+log = logging.getLogger(__name__)
 CONSOLE_ID = re.compile(r"^[A-Za-z0-9:_-]{8,128}$")
 
 
@@ -160,6 +165,7 @@ class _Upstream:
 class Controller(_Upstream):
     label = "the UniFi console"
     key_header = "X-API-KEY"
+    cloud = False
 
     def __init__(
         self,
@@ -180,7 +186,7 @@ class Controller(_Upstream):
         if not CONSOLE_ID.fullmatch(console_id):
             raise Failure("invalid_arguments", "console_id is not a console id (see GET /v1/hosts of the Site Manager)")
         super().__init__(
-            f"{base_url.rstrip('/')}/v1/connector/consoles/{quote(console_id, safe=':')}/network/integration",
+            f"{base_url.rstrip('/')}/v1/connector/consoles/{quote(console_id, safe=':')}",
             api_key,
             transport,
             verify,
@@ -190,6 +196,46 @@ class Controller(_Upstream):
         self.key_header = "X-API-Key"
         self.throttle = throttle or Throttle()
         self.body_max = CLOUD_BODY_MAX
+        self.cloud = True
+        #: Unknown until the first call; then kept for the life of the process.
+        self.prefix: str | None = None
+        self._probe_lock = asyncio.Lock()
+
+    async def _resolve_prefix(self) -> str:
+        """Read-only probe of `GET <prefix>/v1/info`, in the documents' two orders: the one that answers 200 is
+        kept. Nothing else is sent (no write) before it is known."""
+        async with self._probe_lock:
+            if self.prefix is not None:
+                return self.prefix
+            for candidate in CLOUD_PREFIXES:
+                try:
+                    await _Upstream.request(self, "GET", f"{candidate}/v1/info")
+                except Failure as failure:
+                    if failure.code == "not_found":
+                        continue
+                    raise
+                self.prefix = candidate
+                log.info("cloud connector: console API served under %s", candidate)
+                return candidate
+            tried = " and ".join(f"<connector>{p}/v1/info" for p in CLOUD_PREFIXES)
+            raise Failure(
+                "not_found",
+                f"the cloud connector answered 404 on both paths tried, {tried}: wrong console_id, console "
+                "offline or on firmware older than 5.0.3, or a personal key that is not its owner's",
+                404,
+            )
+
+    async def request(
+        self,
+        method: str,
+        path: str,
+        params: Mapping[str, str | int] | None = None,
+        body: Mapping[str, Any] | None = None,
+    ) -> Any:
+        if not self.cloud:
+            return await super().request(method, path, params, body)
+        prefix = self.prefix or await self._resolve_prefix()
+        return await super().request(method, f"{prefix}{path}", params, body)
 
     async def collect(
         self, path: str, params: Mapping[str, str] | None = None, limit: int = 100

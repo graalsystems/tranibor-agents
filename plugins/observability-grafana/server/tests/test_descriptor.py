@@ -152,3 +152,28 @@ async def test_the_declared_compensation_undoes_its_write(runtime: Runtime, mcp:
     silences = await mcp.call("list_silences", state="active")
     assert created["silence_id"] not in {s["id"] for s in silences["silences"]}
     assert NOW  # the fake is seeded relative to a fixed clock
+
+
+PROFILE = Path(__file__).resolve().parents[3] / "observability" / "profiles" / "observability.yaml"
+
+
+def _expand(node: Any, defs: dict[str, Any]) -> Any:
+    if isinstance(node, dict):
+        if "$ref" in node:
+            target = _expand(defs[node["$ref"].rsplit("/", 1)[-1]], defs)
+            return {**target, **{k: _expand(v, defs) for k, v in node.items() if k != "$ref"}}
+        return {k: _expand(v, defs) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_expand(v, defs) for v in node]
+    return node
+
+
+def test_descriptor_schemas_are_the_profiles() -> None:
+    """Each operation carries the profile's input and output, `$ref`s expanded (a server file has no `$defs`)."""
+    profile = yaml.safe_load(PROFILE.read_text())
+    descriptor = yaml.safe_load(DESCRIPTOR.read_text())
+    wanted = {t["name"]: t for t in profile["tools"]}
+    for op in descriptor["operations"]:
+        tool = wanted[op["name"]]
+        assert op["input_schema"] == _expand(tool["input"], profile["$defs"]), op["name"]
+        assert op["output_schema"] == _expand(tool["output"], profile["$defs"]), op["name"]

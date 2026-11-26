@@ -260,8 +260,7 @@ tools:
       properties:
         matchers: {type: object, additionalProperties: {type: string}}
         duration_minutes: {type: integer, description: The server caps it.}
-        comment: {type: string, description: Why, for the person who finds the silence later.}
-        action_key: {type: string}
+        comment: {type: string, description: "Why, for the person who finds the silence later."}
     output:
       type: object
       required: [silence_id, created, starts_at, ends_at, matched_alerts]
@@ -306,7 +305,6 @@ tools:
         tags: {type: array, items: {type: string}}
         time: {type: string, description: ISO 8601; now by default.}
         time_end: {type: string, description: For a region.}
-        action_key: {type: string}
     output:
       type: object
       required: [id, created, tags]
@@ -341,7 +339,7 @@ $defs:
     required: [source, expr]
     properties:
       ref_id: {type: [string, "null"]}
-      source: {type: [string, "null"], description: A source id, or null when the provider does not say.}
+      source: {type: [string, "null"], description: "A source id, or null when the provider does not say."}
       expr: {type: [string, "null"]}
   rule:
     type: object

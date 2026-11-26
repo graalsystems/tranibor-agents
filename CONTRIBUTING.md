@@ -35,8 +35,31 @@ Every pull request runs `tranibor plugin validate` and a reproducible `pack` on 
 of each server, the ServiceNow plugin's matrix cases played as the core's scripted eval matrix plays them
 and judged by its case judge, the repository's own tests (`tests/`), the publication script's tests and
 an offline dry run of it, gitleaks on the pull request's own commits (main's whole history on a push)
-and the DCO. Every job that needs the core runs it at one commit, `CHOREGOS_REF` in `ci.yml` (the same
+and the DCO. Every job that needs the core runs it at one commit, `TRANIBOR_REF` in `ci.yml` (the same
 in `publish.yml`): move both together, to a release tag's commit.
+
+## The former name, `choregos`
+
+The core's ADR 0226 retires the former product name from every layer: each name gets its `tranibor` twin,
+the core reads both for a window of two minor versions (0.30.x and 0.31.x) and writes the new one, and the
+former goes in 0.32.0. A plugin here keeps working on every core its `metadata.core` admits, so:
+
+- **write the new name where every core the plugin supports reads it**, otherwise the former one (the
+  manifests' `apiVersion: choregos/v1` and the media types stay, since a core before 0.30.0 reads nothing
+  else; the template job steps run `choregos-quant`, the only command a job image before 0.30.0 has);
+- **read both** wherever a server receives a name: a header (`X-Tranibor-*` first, then `X-Choregos-*`),
+  a label or a marker the core hands, and what an earlier version wrote on a customer's system (a work
+  note's marker, a correlation id, a mailbox category, an extended property) — a replayed action finds it;
+- **never rename stored state in place**: what an administrator created from an earlier procedure (an
+  integration user, a role, a system property, an application's name) keeps its name and keeps working;
+  the procedure gives a new install the new names and says so;
+- a server's package and command are `tranibor_*` and `tranibor-*`; the former import name and command stay
+  as aliases until the plugin requires a core past the window.
+
+`tests/test_former_name.py` holds it: the former name may appear only in the files and lines its allowlist
+names, each with its reason (a window's twin, stored state, a name no core has renamed, history). A new
+occurrence anywhere else fails the job; a twin whose window has closed is removed from the code and from the
+list together.
 
 ## Documentation of a connector
 
@@ -57,7 +80,7 @@ holds every server to it (`tests/test_procedures.py`, from a core checkout:
 
 A plugin may ship cases of the core's eval matrix (graalsystems/tranibor#1372; `metadata.core` from
 0.23.2, the first core whose schemas accept them): agent cases in the core's own format
-(`choregos_playbooks.evals.agents`; the core's runbook `docs/runbooks/live-eval-matrix.md`, "A plugin's
+(`tranibor_playbooks.evals.agents`; the core's runbook `docs/runbooks/live-eval-matrix.md`, "A plugin's
 cases"), declared in the manifest:
 
 ```yaml
@@ -100,7 +123,7 @@ How the core's matrix plays them:
 - **Scripted cell** (the core's CI, `TRANIBOR_FAKES=1`): the matrix names a case `plugin:<plugin>/<file
   stem>` and loads it from the offline plugins (`TRANIBOR_PLUGINS_OFFLINE`, else the core's
   `plugins/offline/`). It reaches the case's server as the broker does, over MCP with a bearer token, on a
-  fake registered for it in the process (`choregos_adapters.fakes.plugin_servers.use_fake_plugin_server`):
+  fake registered for it in the process (`tranibor_adapters.fakes.plugin_servers.use_fake_plugin_server`):
   the core's CI registers a recording of the server's fake (`FakePluginServer`); without a registered fake
   the case is skipped, never failed. The server's declaration governs its tools: the declared operations
   only, their access, `human_approval` never lowered, the platform's arguments (`action_key`) filled on an
@@ -144,9 +167,11 @@ On every push to `main` (or a manual run on `main`), `.github/workflows/publish.
    never pullable, so nothing generated is committed back. Consequence: for a plugin with a server, the
    digest `tranibor plugin validate` prints on the tree is not the published one.
 3. **The plugin.** ORAS pushes the archive as `ghcr.io/graalsystems/tranibor-agents/<plugin>:<version>`
-   (one layer, `application/vnd.choregos.plugin.v1.tar+gzip`); cosign signs its manifest digest.
+   (one layer, `application/vnd.choregos.plugin.v1.tar+gzip`, the only media type the core reads, 0.30.0
+   included); cosign signs its manifest digest.
 4. **The index.** The published `ghcr.io/graalsystems/tranibor-agents/index` (tag `latest`, one
-   layer `application/vnd.choregos.plugin-index.v1+yaml`) is read, the new versions added — every
+   layer `application/vnd.choregos.plugin-index.v1+yaml`, `apiVersion: choregos/v1`: every deployment reads
+   the same index, and a core before 0.30.0 reads only that) is read, the new versions added — every
    version ever published stays listed, with its digest and `core` range — and it is pushed and signed.
 
 Signatures are keyless, with the workflow's GitHub OIDC token: the identity is

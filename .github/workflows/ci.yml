@@ -13,7 +13,7 @@ env:
   # the graalsystems/tranibor v0.29.0 tag (ADRs 0196-0202 and ADR 0181's `requires.extensions` since
   # 0.28.1; 0.29.0 closed ADR 0181's windows: the evidence facts software-delivery 1.4.0 names).
   # publish.yml pins the same commit.
-  CHOREGOS_REF: 85e7ed7167d0dac40031dd8072ea92081e1b6daf
+  TRANIBOR_REF: 85e7ed7167d0dac40031dd8072ea92081e1b6daf
 
 jobs:
   servers:
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: graalsystems/tranibor
-          ref: ${{ env.CHOREGOS_REF }}
+          ref: ${{ env.TRANIBOR_REF }}
           path: core
       - uses: astral-sh/setup-uv@v6
       - name: validate and pack every plugin
@@ -74,7 +74,7 @@ jobs:
           [ "$found" = 1 ] || echo "no plugin yet"
 
   templates:
-    # Each plugin's `tests/` (a template's own checks), played from a core checkout at CHOREGOS_REF:
+    # Each plugin's `tests/` (a template's own checks), played from a core checkout at TRANIBOR_REF:
     # `tranibor plugin validate` reads a template's manifest only, these read what it ships the way the
     # platform does (its workflows, the core's template conformance checks, the fan-out and the actions).
     runs-on: ubuntu-latest
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: graalsystems/tranibor
-          ref: ${{ env.CHOREGOS_REF }}
+          ref: ${{ env.TRANIBOR_REF }}
           path: core
       - uses: astral-sh/setup-uv@v6
       - name: play each plugin's template tests against the core
@@ -102,8 +102,10 @@ jobs:
             echo "::endgroup::"
           done
           [ "$found" = 1 ] || echo "no template tests yet"
-      # The repository's own tests (tests/test_procedures.py): every plugin server has its procedure, whose
-      # fields are the server's configuration, each parsed by the core's ADR 0067 parser at CHOREGOS_REF.
+      # The repository's own tests: every plugin server has its procedure, whose fields are the server's
+      # configuration, each parsed by the core's ADR 0067 parser at TRANIBOR_REF (tests/test_procedures.py);
+      # every server reads the platform's token under both names (tests/test_server_token.py); the former
+      # product name appears only where its allowlist says why (tests/test_former_name.py, core ADR 0226).
       - name: the repository's tests against the core
         shell: bash
         run: |
@@ -113,7 +115,7 @@ jobs:
 
   e2e:
     # Each plugin's `e2e/` tests run on the core's e2e bench (Temporal in skipped time, the API in-process,
-    # fakes): copied into the core's `tests/e2e/`, at CHOREGOS_REF. `microsoft-365-desk` plays its
+    # fakes): copied into the core's `tests/e2e/`, at TRANIBOR_REF. `microsoft-365-desk` plays its
     # template on its own server there.
     runs-on: ubuntu-latest
     steps:
@@ -122,7 +124,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: graalsystems/tranibor
-          ref: ${{ env.CHOREGOS_REF }}
+          ref: ${{ env.TRANIBOR_REF }}
           path: core
       - uses: astral-sh/setup-uv@v6
       - name: play each plugin's end-to-end tests on the core's bench
@@ -158,7 +160,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: graalsystems/tranibor
-          ref: ${{ env.CHOREGOS_REF }}
+          ref: ${{ env.TRANIBOR_REF }}
           path: core
       - uses: astral-sh/setup-uv@v6
       - name: play and judge the matrix cases
@@ -224,7 +226,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: graalsystems/tranibor
-          ref: ${{ env.CHOREGOS_REF }}
+          ref: ${{ env.TRANIBOR_REF }}
           path: core
       - uses: astral-sh/setup-uv@v6
       - name: publish, tested and dry-run

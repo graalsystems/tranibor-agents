@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """`scripts/publish.py` against an in-memory registry: what CI does on `main`, without GHCR.
 
-    cd <core> && uv run --frozen --package choregos-cli --with pytest pytest <agents>/scripts/tests
+    cd <core> && uv run --frozen --package tranibor-cli --with pytest pytest <agents>/scripts/tests
 """
 
 from __future__ import annotations

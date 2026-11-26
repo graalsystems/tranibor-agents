@@ -198,3 +198,31 @@ def test_the_declared_fake_is_what_switches_the_server_to_its_fake_and_no_admini
     # Without it, the same environment is a real account nobody configured: it refuses to start.
     with pytest.raises(ValueError, match="KEYCLOAK_"):
         build_app(Settings.from_env({"TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}))
+
+
+PROFILE = ROOT.parent / "identity" / "profiles" / "identity.yaml"
+
+
+def _inline(schema: Any, defs: dict[str, Any]) -> Any:
+    """The schema with its local `$ref`s replaced by what they point to."""
+    if isinstance(schema, dict):
+        ref = schema.get("$ref")
+        if isinstance(ref, str):
+            return _inline(defs[ref.removeprefix("#/$defs/")], defs)
+        return {k: _inline(v, defs) for k, v in schema.items() if k != "$defs"}
+    if isinstance(schema, list):
+        return [_inline(v, defs) for v in schema]
+    return schema
+
+
+@pytest.mark.skipif(not PROFILE.exists(), reason="the profile plugin is not beside this one")
+def test_every_operation_of_the_profile_carries_the_profile_schemas() -> None:
+    profile = yaml.safe_load(PROFILE.read_text())
+    ops = operations()
+    for tool in profile["tools"]:
+        op = ops[tool["name"]]
+        for ours, theirs in (("input_schema", "input"), ("output_schema", "output")):
+            assert _inline(op[ours], op[ours].get("$defs", {})) == _inline(tool[theirs], profile["$defs"]), (
+                f"{tool['name']}: {ours} differs from the profile's {theirs}"
+            )
+    assert not {name for name in ops if "input_schema" not in ops[name]} - KEYCLOAK_ONLY

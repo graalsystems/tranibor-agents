@@ -384,7 +384,6 @@ tools:
         last_name: {type: string}
         enabled: {type: boolean}
         setup_actions: {type: array, items: {$ref: "#/$defs/setup_action"}}
-        action_key: {type: string}
     output:
       type: object
       required: [directory, created, user]
@@ -450,9 +449,8 @@ tools:
         directory: {type: string}
         user_id: {type: string}
         username: {type: string}
-        actions: {type: array, minItems: 1, items: {$ref: "#/$defs/setup_action"}}
+        actions: {type: array, description: "At least one action; an empty list is refused. The profile subset has no minItems.", items: {$ref: "#/$defs/setup_action"}}
         lifespan_seconds: {type: integer, minimum: 60, maximum: 2592000, description: "How long the link lives."}
-        action_key: {type: string}
     output:
       type: object
       required: [directory, user_id, actions, sent]

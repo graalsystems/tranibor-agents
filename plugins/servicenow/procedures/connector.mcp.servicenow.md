@@ -3,8 +3,8 @@ id: connector.mcp.servicenow
 title: Connect a ServiceNow instance
 applies_to: {connector: mcp/servicenow}
 audience: org_admin
-version: 6
-reviewed: 2026-11-24
+version: 7
+reviewed: 2026-11-26
 vendor_docs:
   - {title: "Configure OAuth client credentials grant (inbound)", url: "https://www.servicenow.com/docs/bundle/zurich-platform-security/page/administer/security/task/client-credentials.html"}
   - {title: "Table API", url: "https://www.servicenow.com/docs/bundle/zurich-api-reference/page/integrate/inbound-rest/concept/c_TableAPI.html"}
@@ -45,11 +45,28 @@ fields:
 
 ## At ServiceNow
 
-1. **The integration user.** System Security, Users, **New**: user ID `choregos.integration`, check
+An instance set up from an earlier version of this page (plugin 0.2.21 or before) holds the same objects
+under the former name `choregos`. **Keep them: they keep working, and nothing needs renaming.** The server
+writes the name `tranibor` from 0.2.22 (the core's ADR 0226) and reads the former one wherever an earlier
+setup or version left it:
+
+- the user `choregos.integration`, the role `choregos_integration` and their ACLs stay as they are; the
+  connector's `username` names that user;
+- the properties `choregos.webhook_url` and `choregos.webhook_secret` stay: the rule of step 5 reads them
+  when the `tranibor.*` ones are not set, and a rule that still sends `X-Choregos-Secret` is verified as
+  before;
+- the work notes and records an earlier version marked `[choregos:<key>]`, `[choregos-status:<marker>]` or
+  `correlation_id = choregos:<key>` are found by a replay: nothing is written twice.
+
+To move to the new names anyway, create the new objects first, point the connector at them, then remove the
+former ones; never rename the user while the connector uses it. The steps below name what a new instance
+gets.
+
+1. **The integration user.** System Security, Users, **New**: user ID `tranibor.integration`, check
    **Web service access only** and **Internal Integration User**. Do not give it `admin` or `itil`. Give it
    `sn_change_read` (the Change Management API, see Permissions); not `sn_change_write`, which the server
    does not need.
-2. **The custom role.** System Security, Roles, **New**: `choregos_integration`. Give it to the
+2. **The custom role.** System Security, Roles, **New**: `tranibor_integration`. Give it to the
    integration user only. Its rights are listed in Permissions below.
 3. **The OAuth inbound integration** (auth `oauth`).
    - On Washington DC and later, set the system property
@@ -58,11 +75,11 @@ fields:
      `/oauth_token.do` answers `401 access_denied` to the right client ID and secret.
    - System OAuth, Application Registry, **New**, **Create an OAuth API endpoint for external clients**
      (on newer releases: **New Inbound Integration Experience**, **OAuth - Client credentials grant**).
-     Name it `Tranibor`. Set **OAuth Application User** to `choregos.integration`, so every call runs with
+     Name it `Tranibor`. Set **OAuth Application User** to `tranibor.integration`, so every call runs with
      the custom role and nothing more. Save, then copy the **Client ID** and **Client Secret**.
      On Australia the registry record is an **OAuth Client** whose **Inbound Grant Type** is **Client
      Credentials** (`oauth_entity`: `type = client`, `inbound_grant_type = client_credential`, `user` = the
-     integration user). Proven there on 2026-11-24: the token runs as `choregos.integration`, and the live
+     integration user). Proven there on 2026-11-24: the token runs as the integration user, and the live
      suite passed with it.
    - On an older release, or a PDI without the client credentials grant, use auth `basic` with the
      integration user's password instead. **From the release that enforces the `SNCRestrictBasicAuth` gate
@@ -71,18 +88,19 @@ fields:
      password.
 4. **The webhook properties.** System Properties, **New**, twice, both with **Read roles** and
    **Write roles** set to `admin`:
-   - `choregos.webhook_url`, type string: `{{plugin_webhook_url:servicenow/servicenow}}`;
-   - `choregos.webhook_secret`, type string: the webhook secret.
+   - `tranibor.webhook_url`, type string: `{{plugin_webhook_url:servicenow/servicenow}}`;
+   - `tranibor.webhook_secret`, type string: the webhook secret.
 5. **The Business Rule.** System Definition, Business Rules, **New**: name `Tranibor - notify`, table
    **Incident [incident]**, check **Advanced**. When: **after**, on **Insert** and **Update**. Filter
    conditions: **Assignment group** *is one of* the groups you chose. Script:
 
    ```javascript
    (function executeRule(current, previous /*null when async*/) {
-       var url = gs.getProperty('choregos.webhook_url');
-       var secret = gs.getProperty('choregos.webhook_secret');
+       // The former properties (`choregos.*`) are read when the new ones are not set.
+       var url = gs.getProperty('tranibor.webhook_url') || gs.getProperty('choregos.webhook_url');
+       var secret = gs.getProperty('tranibor.webhook_secret') || gs.getProperty('choregos.webhook_secret');
        if (!url || !secret) {
-           gs.warn('Tranibor: choregos.webhook_url or choregos.webhook_secret is not set');
+           gs.warn('Tranibor: tranibor.webhook_url or tranibor.webhook_secret is not set');
            return;
        }
        var operation = current.operation();
@@ -93,7 +111,7 @@ fields:
        request.setEndpoint(url);
        request.setHttpMethod('post');
        request.setRequestHeader('Content-Type', 'application/json');
-       request.setRequestHeader('X-Choregos-Secret', secret);
+       request.setRequestHeader('X-Tranibor-Secret', secret);
        request.setHttpTimeout(10000);
        request.setRequestBody(JSON.stringify({
            table: current.getTableName(),
@@ -117,14 +135,15 @@ fields:
 On the Australia instance the rule posted one request per insert, update and comment, each answered with
 its `sys_mod_count` (`server/tests/test_business_rule_deliveries.py` holds four of them). Tranibor's own
 writes are updates too: each work note and status note it adds is posted back, and Tranibor re-reads the
-item for nothing. A condition `gs.getUserName() != 'choregos.integration'` on the rule avoids that. If an
+item for nothing. A condition `gs.getUserName() != 'tranibor.integration'` (the integration user's ID) on the
+rule avoids that. If an
 incident is ever filed as the integration user itself (a scheduled probe that checks the platform end to end
 does), guard updates only, so that its insert is still delivered:
-`current.operation() == 'insert' || gs.getUserName() != 'choregos.integration'`.
+`current.operation() == 'insert' || gs.getUserName() != 'tranibor.integration'`.
 
 ## Permissions
 
-The custom role `choregos_integration` holds table ACLs, nothing else: no `admin`, no `itil`, no
+The custom role `tranibor_integration` holds table ACLs, nothing else: no `admin`, no `itil`, no
 `security_admin`, no script or system property rights. Creating an ACL needs the `security_admin` role,
 elevated.
 
@@ -164,7 +183,7 @@ the three marked *role added*):
   state moves through it, to a state its change model reaches from the current one (`GET …/nextstates`,
   then `PATCH …/change/{sys_id}`), never through the Table API, whose write of a change's `state` the
   model's Business Rule refuses. Give the integration user the role that API asks for: `sn_change_read`. Proven on the Australia instance on 2026-11-24 (plugin 0.2.15,
-  as `choregos.integration`, by basic authentication and by OAuth): a change moves New to Assess through
+  as the integration user, by basic authentication and by OAuth): a change moves New to Assess through
   it, an unreachable state and the close are refused before any write; file the change with an assignment
   group, or the change model refuses New to Assess. Without `sn_change_read` the API answers the next
   states with 200 and `available_states: [null]` (no 403), and the server refuses the move naming the
@@ -201,7 +220,7 @@ organisation can only make that stricter.
 2. `base_url`: `https://<instance>.service-now.com`. `auth`: `oauth` (or `basic`).
 3. `client_id` and `client_secret` from step 3 (or `username` and `password` for `basic`): sealed, shown
    once.
-4. `webhook_secret`: the same secret as the `choregos.webhook_secret` property.
+4. `webhook_secret`: the same secret as the `tranibor.webhook_secret` property.
 5. `assignment_groups`: the groups the Business Rule filters on.
 6. Create a project from the template **ServiceNow · incident triage under approval**. Put the people who
    review the triage in the `service-desk` group.
@@ -216,7 +235,8 @@ organisation can only make that stricter.
 2. In ServiceNow, create an incident assigned to one of the groups. Within a minute it appears on the
    project's board in **In the queue**, then the triager runs.
 3. System Logs, **Outbound HTTP Requests**: the Business Rule's POST answered `200`.
-4. Approve the triage in Tranibor: a work note signed `[choregos:…]` appears on the incident.
+4. Approve the triage in Tranibor: a work note signed `[tranibor:…]` appears on the incident (`[choregos:…]`
+   from a server before 0.2.22).
 
 ## When it fails
 
@@ -241,7 +261,7 @@ organisation can only make that stricter.
 - `the Change Management API answered no next state … lacks the role sn_change_read`: give the
   integration user `sn_change_read`. A `404` on `/api/sn_chg_rest/change/…`: the Change Management API
   is not active on the instance.
-- The webhook answers `401`: the `X-Choregos-Secret` sent differs from `webhook_secret`, or a property is
+- The webhook answers `401`: the `X-Tranibor-Secret` (or `X-Choregos-Secret`) sent differs from `webhook_secret`, or a property is
   empty (the system log shows `Tranibor: … is not set`).
 - No outbound request in the log: the Business Rule's filter does not match the incident's assignment
   group, or the rule is inactive.

@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: address_review
   summary: Answers every review remark — fixes it or says why not — and refactors nothing else.
   tools: ["skill:code-review", "skill:conventional-commits", "knowledge"]
@@ -21,7 +21,7 @@ agent:
       3. Do not refactor anything else on the way: that would need a new review.
 
       Answer as the `code-review` skill says (fixed with where, or declined in one sentence) and commit as the
-      `conventional-commits` skill says. Conventions: if knowledge bases lie under `.choregos/knowledge/`, read
+      `conventional-commits` skill says. Conventions: if knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read
       each `INDEX.md` and follow the conventions it states for this stack, citing `knowledge/<base>/<file>` when
       a choice rests on one; without any, follow the repository's own conventions (`AGENTS.md`, the nearest
       code).

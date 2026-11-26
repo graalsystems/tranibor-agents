@@ -4,29 +4,29 @@ The agents of a governed software delivery, from triage to the production go or 
 
 | Agent | Catalogue version | What it does |
 |:--|--:|:--|
-| [`architect`](agents/architect.yaml) | 4 | Writes one architecture decision record in MADR 4 format, citing the enterprise framework when a knowledge base holds it; once approved, marks it accepted. |
-| [`ci-fixer`](agents/ci-fixer.yaml) | 3 | Makes a red CI green with the smallest fix of the cause; reports flaky tests, never disables one silently. |
-| [`compliance`](agents/compliance.yaml) | 2 | Licences of dependencies, personal-data impact of a change, third-party terms — a review for the people who decide, never legal advice. |
-| [`developer`](agents/developer.yaml) | 4 | Implements the specification inside the allowed paths, test first, small conventional commits. |
-| [`devops`](agents/devops.yaml) | 3 | Release readiness and a rollout plan before the train; after it, reads logs and metrics through read-only connectors. Production stays behind the train. |
-| [`docs-writer`](agents/docs-writer.yaml) | 3 | Updates the user documentation, the changelog and the API reference from the branch's diff, and checks that every visible change is documented. |
-| [`planner`](agents/planner.yaml) | 3 | Writes the implementation plan — ordered steps, files, the test that proves each step, rollback. |
+| [`architect`](agents/architect.yaml) | 5 | Writes one architecture decision record in MADR 4 format, citing the enterprise framework when a knowledge base holds it; once approved, marks it accepted. |
+| [`ci-fixer`](agents/ci-fixer.yaml) | 4 | Makes a red CI green with the smallest fix of the cause; reports flaky tests, never disables one silently. |
+| [`compliance`](agents/compliance.yaml) | 3 | Licences of dependencies, personal-data impact of a change, third-party terms — a review for the people who decide, never legal advice. |
+| [`developer`](agents/developer.yaml) | 5 | Implements the specification inside the allowed paths, test first, small conventional commits. |
+| [`devops`](agents/devops.yaml) | 4 | Release readiness and a rollout plan before the train; after it, reads logs and metrics through read-only connectors. Production stays behind the train. |
+| [`docs-writer`](agents/docs-writer.yaml) | 4 | Updates the user documentation, the changelog and the API reference from the branch's diff, and checks that every visible change is documented. |
+| [`planner`](agents/planner.yaml) | 4 | Writes the implementation plan — ordered steps, files, the test that proves each step, rollback. |
 | [`prod-verifier`](agents/prod-verifier.yaml) | 4 | After the release train has deployed, checks production read-only and gives a go or no-go. |
-| [`qa`](agents/qa.yaml) | 4 | A test plan from the specification, the edge cases nobody wrote, and mutation testing on the changed code — a test that cannot fail proves nothing. |
+| [`qa`](agents/qa.yaml) | 5 | A test plan from the specification, the edge cases nobody wrote, and mutation testing on the changed code — a test that cannot fail proves nothing. |
 | [`release-notes-writer`](agents/release-notes-writer.yaml) | 3 | Writes user-facing release notes from the specification and the diff; changes no file. |
 | [`researcher`](agents/researcher.yaml) | 4 | Researches a question in the code, the existing decisions and memory; lists options with evidence; changes nothing. |
-| [`review-responder`](agents/review-responder.yaml) | 3 | Answers every review remark — fixes it or says why not — and refactors nothing else. |
-| [`reviewer`](agents/reviewer.yaml) | 3 | Reviews the branch with fresh eyes — correctness, security, performance, readability, tests — and gives a verdict. |
-| [`secops`](agents/secops.yaml) | 2 | Supply chain and runtime posture — dependency CVEs, SBOM, secrets, container and IaC scans — run with the image's scanners and interpreted, as a SARIF report. |
-| [`security-reviewer`](agents/security-reviewer.yaml) | 3 | A security-only review — injection, authorization, secrets, dependencies, data exposure — with a verdict. |
-| [`spec-writer`](agents/spec-writer.yaml) | 4 | Turns a work item into a testable specification and the minimal list of paths the change may touch. |
-| [`tester`](agents/tester.yaml) | 4 | Runs the full checks, writes the missing tests for each acceptance criterion, never fixes application code. |
+| [`review-responder`](agents/review-responder.yaml) | 4 | Answers every review remark — fixes it or says why not — and refactors nothing else. |
+| [`reviewer`](agents/reviewer.yaml) | 4 | Reviews the branch with fresh eyes — correctness, security, performance, readability, tests — and gives a verdict. |
+| [`secops`](agents/secops.yaml) | 3 | Supply chain and runtime posture — dependency CVEs, SBOM, secrets, container and IaC scans — run with the image's scanners and interpreted, as a SARIF report. |
+| [`security-reviewer`](agents/security-reviewer.yaml) | 4 | A security-only review — injection, authorization, secrets, dependencies, data exposure — with a verdict. |
+| [`spec-writer`](agents/spec-writer.yaml) | 5 | Turns a work item into a testable specification and the minimal list of paths the change may touch. |
+| [`tester`](agents/tester.yaml) | 5 | Runs the full checks, writes the missing tests for each acceptance criterion, never fixes application code. |
 | [`triager`](agents/triager.yaml) | 3 | Sizes and qualifies an incoming work item; asks at most three questions; changes no file. |
-| [`ux-designer`](agents/ux-designer.yaml) | 2 | Reviews user-facing changes against the organisation's design system (a skill or a knowledge base) and checks accessibility, with axe when the project can run it. |
+| [`ux-designer`](agents/ux-designer.yaml) | 3 | Reviews user-facing changes against the organisation's design system (a skill or a knowledge base) and checks accessibility, with axe when the project can run it. |
 
 The skill [`madr-4`](skills/madr-4/SKILL.md) (MADR 4.0.0 decision records, carried by `architect` and `reviewer`) ships with MADR's licence (`MIT OR CC0-1.0`, the MIT text in `LICENSE`) and its `PROVENANCE.json`. The gate rates it high risk (it links to adr.github.io), so installing this plugin waits for a second administrator (ADR 0050).
 
-Version 1.4.0, core `>=0.29.0,<1.0.0` (its agents name the evidence as the facts of `evidence.facts`, the only form the core 0.29 reads). Since 1.3.0 it names the extension it needs (`requires.extensions: [software-delivery]`). Up to 1.1.1 the instructions were the core's, byte for byte; 1.2.0 adds the sentences that name the skills and the conventions. The plugin's files
+Version 1.4.1, core `>=0.29.0,<1.0.0` (its agents name the evidence as the facts of `evidence.facts`, the only form the core 0.29 reads; 1.4.1 names the run directory as the core 0.30 lays it, `.tranibor/`, and as an earlier core does, `.choregos/`). Since 1.3.0 it names the extension it needs (`requires.extensions: [software-delivery]`). Up to 1.1.1 the instructions were the core's, byte for byte; 1.2.0 adds the sentences that name the skills and the conventions. The plugin's files
 do not hold the work-item context, which the core prepends when it installs an internal agent. See
 [MIGRATION-FROM-CORE.md](../../MIGRATION-FROM-CORE.md).
 
@@ -54,7 +54,8 @@ outbound link, and are rated `low` by the skill gate.
 
 An organisation's own conventions (its stack, its design system, its deployment road) are **not** here. The agents
 that apply them (`spec-writer`, `planner`, `developer`, `tester`, `qa`, `ci-fixer`, `reviewer`, `security-reviewer`,
-`review-responder`, `docs-writer`, `devops`) say to read the knowledge bases under `.choregos/knowledge/` and follow
+`review-responder`, `docs-writer`, `devops`) say to read the knowledge bases under `.tranibor/knowledge/` (under
+`.choregos/knowledge/` with a core before 0.30, which lays them there: 1.4.1) and follow
 the conventions their `INDEX.md` states. An organisation attaches such a base to the agent in a version of its own;
 since core #1600 an upgrade of this plugin keeps knowledge entries the organisation added, but **not skills**: an
 organisation that adds a skill to one of these agents makes it divergent, and the upgrade is then offered, not applied.
@@ -95,5 +96,5 @@ lessons go to the project's shared memory. A later version may narrow it.
 
 ```sh
 tranibor plugin validate plugins/software-delivery
-tranibor plugin pack plugins/software-delivery -o software-delivery-1.4.0.tar.gz   # same bytes every time
+tranibor plugin pack plugins/software-delivery -o software-delivery-1.4.1.tar.gz   # same bytes every time
 ```

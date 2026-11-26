@@ -6,8 +6,8 @@ from __future__ import annotations
 import pytest
 from starlette.testclient import TestClient
 
-from choregos_microsoft_365.app import build_app
-from choregos_microsoft_365.config import Settings
+from tranibor_microsoft_365.app import build_app
+from tranibor_microsoft_365.config import Settings
 
 from .conftest import BASE, MCP_HEADERS, TOKEN, Mcp
 
@@ -16,7 +16,7 @@ def test_healthz(http: TestClient) -> None:
     assert http.get("/healthz", headers={"Authorization": ""}).json() == {
         "status": "ok",
         "fake": True,
-        "version": "0.1.1",
+        "version": "0.1.2",
     }
 
 
@@ -36,7 +36,7 @@ def test_mcp_without_the_platform_token_is_refused(http: TestClient, authorizati
 
 def test_a_persons_token_does_not_replace_the_platforms(http: TestClient) -> None:
     """The person's token reaches Graph; it never authenticates a caller to the server."""
-    headers = {"Authorization": "", "X-Choregos-User-Token": TOKEN}
+    headers = {"Authorization": "", "X-Tranibor-User-Token": TOKEN}
     assert _tools_list(http, headers) == 401
 
 

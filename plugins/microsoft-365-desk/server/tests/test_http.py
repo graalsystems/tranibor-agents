@@ -10,16 +10,16 @@ from collections.abc import Iterator
 import pytest
 from starlette.testclient import TestClient
 
-from choregos_m365_desk.app import build_app
-from choregos_m365_desk.config import Settings
-from choregos_m365_desk.fake import MAIL_PLAIN
+from tranibor_m365_desk.app import build_app
+from tranibor_m365_desk.config import Settings
+from tranibor_m365_desk.fake import MAIL_PLAIN
 
 from .test_descriptor import operations
 
 TOKEN = "platform-token-for-tests"
 BEARER = {"Authorization": f"Bearer {TOKEN}"}
 #: The Host the platform's Service gives the server: not localhost, and accepted.
-BASE = "http://desk.choregos-plugins.svc:8080"
+BASE = "http://desk.tranibor-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
 REAL = {
     "M365_DESK_TENANT_ID": "0f6f2f1c-1111-4222-8333-444455556666",
@@ -39,7 +39,7 @@ def http() -> Iterator[TestClient]:
 
 def test_healthz_is_open(http: TestClient) -> None:
     response = http.get("/healthz", headers={"Authorization": ""})
-    assert response.json() == {"status": "ok", "fake": True, "version": "0.1.2"}
+    assert response.json() == {"status": "ok", "fake": True, "version": "0.1.3"}
 
 
 @pytest.mark.parametrize(

@@ -6,6 +6,7 @@ must_contain:
 - cyclonedx
 - gitleaks detect
 - trivy config
+- .tranibor/
 - not scanned
 - never as clean
 - sarif 2.1.0

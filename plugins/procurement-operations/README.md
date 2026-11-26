@@ -12,7 +12,7 @@ It does not require `procurement`: nothing here references an agent, skill or te
 
 | Part | Path | What it is |
 |:--|:--|:--|
-| Manifest | [`plugin.yaml`](plugin.yaml) | `procurement-operations` 0.3.4, core `>=0.28.1,<1.0.0` |
+| Manifest | [`plugin.yaml`](plugin.yaml) | `procurement-operations` 0.3.5, core `>=0.28.1,<1.0.0` |
 | Agent | [`agents/supplier-file-checker.yaml`](agents/supplier-file-checker.yaml) | catalogue role `structure`: copies a supplier's identity and dated documents into `supplier_file` |
 | Agent | [`agents/renewal-analyst.yaml`](agents/renewal-analyst.yaml) | catalogue role `renewal_memo`: writes `renewal_memo_markdown` for one contract ending soon (`get_contract` only) |
 | Agent | [`agents/request-qualifier.yaml`](agents/request-qualifier.yaml) | catalogue role `qualify`: reads a purchase request against the house policy and the framework agreements, proposes a route in `qualification` and a `brief_markdown` |
@@ -22,6 +22,12 @@ It does not require `procurement`: nothing here references an agent, skill or te
 | Server | [`servers/purchasing.yaml`](servers/purchasing.yaml), source [`server/`](server/PROFILE.md) | the MCP server `purchasing`: eleven operations of a fixed profile, served by Odoo 19 and 20 and by a seeded fake |
 | Procedure | [`procedures/connector.mcp.purchasing.md`](procedures/connector.mcp.purchasing.md) | how the server is connected to Odoo: a dedicated user, the least rights, an API key |
 | Evals | [`evals/`](evals) | instruction checks and live cases of each agent, and the three matrix cases of [`evals/matrix/`](evals/matrix) (named `plugin:procurement-operations/<file stem>`) |
+
+## What version 0.3.5 fixes
+
+The core 0.30.0 lays the knowledge bases under `.tranibor/knowledge/` (its ADR 0226, R9a), no longer under
+`.choregos/knowledge/`: `request-qualifier` (catalogue version 2) read the house policy under the former only,
+and found nothing there on that core. It now names both, the former for a core before 0.30.0.
 
 ## What version 0.3.4 fixes
 
@@ -125,7 +131,7 @@ attested. The workflow opens nothing in the purchasing system. The agent must al
 
 ```sh
 tranibor plugin validate plugins/procurement-operations
-tranibor plugin pack plugins/procurement-operations -o procurement-operations-0.3.4.tar.gz   # same bytes every time
+tranibor plugin pack plugins/procurement-operations -o procurement-operations-0.3.5.tar.gz   # same bytes every time
 ```
 
 The server's own checks, in `server/` (the `servers` job): `uv sync --all-extras --dev`, `uv run ruff check .`,

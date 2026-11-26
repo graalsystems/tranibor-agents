@@ -269,6 +269,7 @@ def merged_index(previous: dict[str, Any] | None, releases: list[Release]) -> di
                 f"holds {release.digest}"
             )
         versions[release.version] = release.entry()
+    # apiVersion `choregos/v1`: every deployment reads this one index, and a core before 0.30.0 reads no other.
     index = {"apiVersion": "choregos/v1", "kind": "PluginIndex", "plugins": plugins}
     try:
         parse_index(index)  # plugin-index.schema.json, as a deployment reads it
@@ -342,7 +343,7 @@ def main() -> int:
     parser.add_argument("--no-sign", action="store_true", help="push without signing")
     args = parser.parse_args()
     client = None if args.offline else Registry(sign=not args.no_sign)
-    work = args.work or Path(tempfile.mkdtemp(prefix="choregos-publish-"))
+    work = args.work or Path(tempfile.mkdtemp(prefix="tranibor-publish-"))
     return publish_all(args.plugins, args.registry.rstrip("/"), client, work, args.source_url)
 
 

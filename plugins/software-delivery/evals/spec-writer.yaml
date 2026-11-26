@@ -4,6 +4,7 @@ description: An executable specification, minimal allowed paths, asks rather tha
 must_contain:
 - acceptance-criteria
 - work-item-sizing
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - given / when / then
 - out of scope

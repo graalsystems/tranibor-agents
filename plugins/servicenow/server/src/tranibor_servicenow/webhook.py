@@ -7,9 +7,11 @@ a request item or a change, a JSON object (or a list of them):
     {"table": "incident", "sys_id": "<32 hex>", "number": "INC0010001",
      "sys_mod_count": 3, "operation": "insert" | "update" | "comment", "state": "2"}
 
-with the shared secret in `X-Choregos-Secret`. Each becomes `{kind, item_key, delivery_id}` where
-`delivery_id = sys_id:sys_mod_count` — a replayed delivery carries the same id, and the core de-duplicates
-on it. The core re-reads the item before acting, so nothing else of the payload is trusted.
+with the shared secret in `X-Tranibor-Secret` (a Business Rule written before the core's ADR 0226 sends
+`X-Choregos-Secret`, still read when the new header is absent or empty). Each becomes
+`{kind, item_key, delivery_id}` where `delivery_id = sys_id:sys_mod_count` — a replayed delivery carries
+the same id, and the core de-duplicates on it. The core re-reads the item before acting, so nothing else
+of the payload is trusted.
 """
 
 from __future__ import annotations
@@ -22,7 +24,10 @@ from typing import Any
 from .errors import Refused
 from .tables import TRACKER_TABLES, is_sys_id, table_of_number
 
-SECRET_HEADER = "x-choregos-secret"  # noqa: S105 - a header name
+#: The header that carries the shared secret, then its former name (the core's ADR 0226): a Business Rule
+#: an administrator installed from an earlier procedure sends the former, and the core relays both names
+#: from 0.30.0. The new one is read first, as the core reads its own headers.
+SECRET_HEADERS = ("x-tranibor-secret", "x-choregos-secret")
 
 CREATED = "tracker.item.created"
 UPDATED = "tracker.item.updated"
@@ -38,11 +43,11 @@ CLOSED_STATES: dict[str, frozenset[str]] = {
 
 
 def verify(headers: Mapping[str, str], secret: str | None) -> bool:
-    """Constant-time comparison of `X-Choregos-Secret` with the configured secret."""
+    """Constant-time comparison of `X-Tranibor-Secret` (else `X-Choregos-Secret`) with the configured secret."""
     if not secret:
         return False
     lowered = {k.lower(): v for k, v in headers.items()}
-    given = lowered.get(SECRET_HEADER, "")
+    given = next((lowered[name] for name in SECRET_HEADERS if lowered.get(name)), "")
     return hmac.compare_digest(given.encode(), secret.encode())
 
 

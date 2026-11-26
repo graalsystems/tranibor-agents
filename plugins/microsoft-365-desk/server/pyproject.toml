@@ -1,6 +1,6 @@
 [project]
-name = "choregos-m365-desk"
-version = "0.1.2"
+name = "tranibor-m365-desk"
+version = "0.1.3"
 description = "MCP server: a Microsoft 365 shared mailbox and a Teams channel as a Tranibor tracker."
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
@@ -15,7 +15,9 @@ dependencies = [
 ]
 
 [project.scripts]
-choregos-m365-desk = "choregos_m365_desk.app:main"
+tranibor-m365-desk = "tranibor_m365_desk.app:main"
+# The former command, for the window of the core's ADR 0226 (a script or a runbook may still run it).
+choregos-m365-desk = "tranibor_m365_desk.app:main"
 
 [dependency-groups]
 dev = [
@@ -34,7 +36,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/choregos_m365_desk"]
+# `choregos_m365_desk` is the former import name, an alias of the package (src/choregos_m365_desk).
+packages = ["src/tranibor_m365_desk", "src/choregos_m365_desk"]
 
 [tool.ruff]
 line-length = 120

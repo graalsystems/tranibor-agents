@@ -6,7 +6,7 @@
 # this agent, and none of what it must never say. No model, no network.
 #
 # Level 2, live — `cases`, in the `AgentEvalCase` shape (S40-02d): each runs as a capped trial against the
-# server's fake instance (`SERVICENOW_FAKE=1`, seed in server/src/choregos_servicenow/fake.py) and asserts
+# server's fake instance (`SERVICENOW_FAKE=1`, seed in server/src/tranibor_servicenow/fake.py) and asserts
 # on the run's summary. The record numbers below are the seed's.
 agent: itsm-triager
 description: Triages from the incident, its journal, its CI and similar records; cites incidents and

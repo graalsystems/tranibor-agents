@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from choregos_microsoft_365.entra import GRAPH_APP_ID, SCOPES, main, problems
+from tranibor_microsoft_365.entra import GRAPH_APP_ID, SCOPES, main, problems
 
 ENTRA = Path(__file__).resolve().parents[1] / "entra"
 
@@ -63,11 +63,11 @@ def test_another_api_is_refused() -> None:
         (lambda m: m.update(signInAudience="AzureADMultipleOrgs"), "single tenant"),
         (
             lambda m: m["web"].update(
-                redirectUris=["http://choregos.example.com/api/v1/me/connected-accounts/callback"]
+                redirectUris=["http://tranibor.example.com/api/v1/me/connected-accounts/callback"]
             ),
             "https",
         ),
-        (lambda m: m["web"].update(redirectUris=["https://choregos.example.com/elsewhere"]), "ending with"),
+        (lambda m: m["web"].update(redirectUris=["https://tranibor.example.com/elsewhere"]), "ending with"),
         (lambda m: m["web"].update(redirectUris=[]), "no web redirect URI"),
         (lambda m: m.update(spa={"redirectUris": ["https://x.example/"]}), "spa redirect URIs"),
         (lambda m: m["web"]["implicitGrantSettings"].update(enableAccessTokenIssuance=True), "implicit grant"),

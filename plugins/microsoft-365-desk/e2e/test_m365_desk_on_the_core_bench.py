@@ -12,7 +12,7 @@ through `use_plugin_transport`; the directory is the core's FakeEntra. Run it fr
 
 - A mail asking for the CRM: picked up by the tracker reconciliation, sorted (scripted agent), one grant
   child held in the platform, the CRM's approvers group decides (the person granted is refused), Entra is
-  written, the requester is answered once in the mail's thread, the mail ends categorised `Choregos: Done`.
+  written, the requester is answered once in the mail's thread, the mail ends categorised `Tranibor: Done`.
 - A Teams mention: refused unsigned, accepted with the bot service's JWT, a person of the desk answers, the
   answer is posted in the thread through the Bot Connector.
 """
@@ -114,13 +114,13 @@ async def kube(platform: Platform, tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("TRANIBOR_PLUGIN_FILES_DIR", str(tmp_path / "plugin-files"))
     reset_settings_cache()
     root = tmp_path / "plugins"
-    target = root / "microsoft-365-desk" / "0.1.2"
+    target = root / "microsoft-365-desk" / "0.1.3"
     shutil.copytree(
         PLUGIN_DIR, target, ignore=shutil.ignore_patterns(".venv", "__pycache__", "*.zip", "uv.lock")
     )
     use_plugin_supply(OfflineDirectory(root))
     api = FakeKubernetesApi()
-    use_plugin_runtime(PluginServerRuntime(api, "choregos-plugins"))
+    use_plugin_runtime(PluginServerRuntime(api, "tranibor-plugins"))
     yield api
     use_plugin_runtime(None)
     use_plugin_transport(None)
@@ -155,8 +155,8 @@ async def _as(platform: Platform, email: str) -> AsyncClient:
 
 
 async def _organisation(platform: Platform, kube: Any, teams: bool = False) -> OnItsFake:
-    from choregos_m365_desk.app import build_app
-    from choregos_m365_desk.config import (
+    from tranibor_m365_desk.app import build_app
+    from tranibor_m365_desk.config import (
         FAKE_CHANNEL_ID,
         FAKE_CLIENT_ID,
         FAKE_MAILBOX,
@@ -168,13 +168,13 @@ async def _organisation(platform: Platform, kube: Any, teams: bool = False) -> O
 
     client = platform.client
     body = {"name": "directory", "kind": "identity", "type": "entra",
-            "config": {"tenant_id": "acme", "client_id": "choregos"},
+            "config": {"tenant_id": "acme", "client_id": "tranibor"},
             "secret_refs": {"client_secret": "env:CONNECTOR_E2E_KEY_DIRECTORY"}}  # fmt: skip
     created = await client.post(f"{ORG}/connectors", json=body)
     assert created.status_code == 201, created.text
 
     asked = await client.post(
-        f"{ORG}/plugins/install", json={"source": "offline", "name": "microsoft-365-desk", "version": "0.1.2"}
+        f"{ORG}/plugins/install", json={"source": "offline", "name": "microsoft-365-desk", "version": "0.1.3"}
     )
     assert asked.status_code == 202, asked.text
     await _member(client, SECOND, "org_admin")
@@ -256,7 +256,7 @@ async def _wait(predicate: Any, what: str, tries: int = 600) -> Any:
 async def test_a_mail_asking_for_the_crm_is_granted_and_answered_in_its_thread(
     platform: Platform, worker: Any, kube: Any, directory: Any
 ) -> None:
-    from choregos_m365_desk.fake import MAIL_HTML, MAIL_PLAIN, message_id
+    from tranibor_m365_desk.fake import MAIL_HTML, MAIL_PLAIN, message_id
     from tranibor_api.temporal import interpreter_id
     from tranibor_orchestrator.train_client import fake_starts
 
@@ -358,7 +358,7 @@ async def test_a_mail_asking_for_the_crm_is_granted_and_answered_in_its_thread(
         "Done: lea@northwind.dev was added to the directory group 00000000-0000-0000-0000-000000000003"
         in (reply.body)
     ), reply.body
-    assert "Choregos: Done" in original.categories, original.categories
+    assert "Tranibor: Done" in original.categories, original.categories
     child_row = await platform.work_item(f"{key}.1")
     parent_row = await platform.work_item(key)
     assert (child_row.state, parent_row.state) == ("granted", "settled")
@@ -379,8 +379,8 @@ HOOK = "/api/v1/webhooks/plugins/northwind/microsoft-365-desk/desk"
 async def test_a_teams_mention_is_answered_by_a_desk_person_in_its_thread(
     platform: Platform, worker: Any, kube: Any, directory: Any
 ) -> None:
-    from choregos_m365_desk.config import FAKE_CHANNEL_ID
-    from choregos_m365_desk.fake import ROOT_ID, activity
+    from tranibor_m365_desk.config import FAKE_CHANNEL_ID
+    from tranibor_m365_desk.fake import ROOT_ID, activity
     from tranibor_api.temporal import interpreter_id
 
     client = platform.client

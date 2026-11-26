@@ -3,7 +3,8 @@
 Agents for [Tranibor](https://github.com/graalsystems/tranibor), the platform of governed agents,
 each packaged as a **plugin** the platform installs by itself.
 
-A plugin is one directory with a `plugin.yaml` at its root (`apiVersion: choregos/v1`, `kind: Plugin`).
+A plugin is one directory with a `plugin.yaml` at its root (`apiVersion: choregos/v1`, the only one a core
+before 0.30.0 reads, `kind: Plugin`).
 It carries what an agent needs to do its job:
 
 | Part | What it is |

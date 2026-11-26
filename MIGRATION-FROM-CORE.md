@@ -87,7 +87,7 @@ the three shared files only.
   included. The other three plugins install without one.
 - **Core code that reads the catalogue by slug** keeps needing an entry: `agent_drafts.py`
   (`agent-drafter`), `knowledge/distill.py` (`knowledge-distiller`), `gabarits.py`, `routers/agents.py`,
-  `services/catalogue_d_agents.py`, `choregos_playbooks.evals.agents`, and the migration
+  `services/catalogue_d_agents.py`, `tranibor_playbooks.evals.agents`, and the migration
   `20261016_1500_template_catalogue_provenance`.
 - **Client metadata.** `catalogue.client` and `catalogue.reach` of the six clients are read from the core's
   catalogue by `services/catalogue_d_agents.py` (which client the Integrations page offers); the plugin

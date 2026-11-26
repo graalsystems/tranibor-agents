@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import pytest
 
-from choregos_m365_desk.app import Runtime, build_server
-from choregos_m365_desk.config import FAKE_CHANNEL_ID, Settings
-from choregos_m365_desk.fake import (
+from tranibor_m365_desk.app import Runtime, build_server
+from tranibor_m365_desk.config import FAKE_CHANNEL_ID, Settings
+from tranibor_m365_desk.fake import (
     CONVERSATION_ID,
     MAIL_HTML,
     MAIL_PLAIN,
@@ -18,8 +18,8 @@ from choregos_m365_desk.fake import (
     ROOT_ID,
     FakeMicrosoft,
 )
-from choregos_m365_desk.keys import parse_key
-from choregos_m365_desk.tracker import status_property
+from tranibor_m365_desk.keys import parse_key
+from tranibor_m365_desk.tracker import status_property
 
 from .conftest import SKIP_WITHOUT_CORE, Mcp, Profile, Tracker, no_sleep
 
@@ -155,7 +155,7 @@ async def test_create_item_is_refused(mcp: Mcp) -> None:
 async def test_set_state_is_a_category_kept_beside_the_others(tracker: Tracker, fake: FakeMicrosoft) -> None:
     changed = await tracker("tracker_set_state", key=TAKEN, status="Waiting for review", label="x", remove_labels=[])
     assert changed == {"key": TAKEN, "changed": True, "state": "Waiting for review", "ignored": ["label"]}
-    assert fake.messages[MAIL_TAKEN].categories == ["Blue category", "Choregos: Waiting for review"]
+    assert fake.messages[MAIL_TAKEN].categories == ["Blue category", "Tranibor: Waiting for review"]
     again = await tracker("tracker_set_state", key=TAKEN, status="Waiting for review", label=None, remove_labels=[])
     assert again["changed"] is False
     nothing = await tracker("tracker_set_state", key=PLAIN, status=None, label=None, remove_labels=[])
@@ -169,8 +169,8 @@ async def test_set_state_is_a_category_kept_beside_the_others(tracker: Tracker, 
 async def test_a_status_never_breaks_a_category(tracker: Tracker, fake: FakeMicrosoft) -> None:
     await tracker("tracker_set_state", key=PLAIN, status="a,b;\nc" + "x" * 100, label=None, remove_labels=[])
     category = fake.messages[MAIL_PLAIN].categories[-1]
-    assert category.startswith("Choregos: a b") and "," not in category and "\n" not in category
-    assert len(category) <= len("Choregos: ") + 60
+    assert category.startswith("Tranibor: a b") and "," not in category and "\n" not in category
+    assert len(category) <= len("Tranibor: ") + 60
 
 
 async def test_upsert_status_keeps_the_status_out_of_the_requesters_sight(
@@ -189,7 +189,7 @@ async def test_upsert_status_keeps_the_status_out_of_the_requesters_sight(
 async def test_close_sets_done_once_and_sends_nothing(tracker: Tracker, fake: FakeMicrosoft) -> None:
     closed = await tracker("tracker_close", key=TAKEN, close_notes="Delivered.", close_code=None)
     assert closed == {"key": TAKEN, "closed": True, "state": "Done"}
-    assert fake.messages[MAIL_TAKEN].categories == ["Blue category", "Choregos: Done"]
+    assert fake.messages[MAIL_TAKEN].categories == ["Blue category", "Tranibor: Done"]
     again = await tracker("tracker_close", key=TAKEN, close_notes="Delivered.", close_code=None)
     assert again == {"key": TAKEN, "closed": False, "state": "Done"}
     assert fake.sent_mail == []
@@ -241,15 +241,16 @@ async def test_mirrored_writes_on_a_channel_no_longer_configured_are_no_ops(
 
 
 async def test_a_state_mirrored_by_its_label_alone_is_a_category(tracker: Tracker, fake: FakeMicrosoft) -> None:
-    """The core's `mirror_state` always sends a label (`choregos:<state>` when the workflow names none) and a
-    status only when the workflow maps one: either way the message the platform took is categorised."""
-    by_label = await tracker("tracker_set_state", key=PLAIN, status=None, label="choregos:triage", remove_labels=[])
+    """The core's `mirror_state` always sends a label (`tranibor:<state>` when the workflow names none, from
+    core 0.30.0) and a status only when the workflow maps one: either way the message the platform took is
+    categorised."""
+    by_label = await tracker("tracker_set_state", key=PLAIN, status=None, label="tranibor:triage", remove_labels=[])
     assert by_label == {"key": PLAIN, "changed": True, "state": "triage", "ignored": []}
-    assert fake.messages[MAIL_PLAIN].categories == ["Choregos: triage"]
+    assert fake.messages[MAIL_PLAIN].categories == ["Tranibor: triage"]
     named = await tracker("tracker_set_state", key=PLAIN, status=None, label="Waiting for review", remove_labels=[])
     assert (named["state"], fake.messages[MAIL_PLAIN].categories) == (
         "Waiting for review",
-        ["Choregos: Waiting for review"],
+        ["Tranibor: Waiting for review"],
     )
     assert (await tracker("tracker_list_candidates", limit=50))["keys"] == [HTML]
 

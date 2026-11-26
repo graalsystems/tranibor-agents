@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: implement
   summary: Updates the user documentation, the changelog and the API reference from the branch's diff, and checks that every visible change is documented.
   outputs: [docs_report]
@@ -27,7 +27,7 @@ agent:
       for it with `request_scope_change` (path and reason) instead of writing elsewhere.
 
       Write the changelog entries as the `release-notes` skill says, in the format the file already uses.
-      Conventions: if knowledge bases lie under `.choregos/knowledge/`, read each `INDEX.md` and follow the
+      Conventions: if knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read each `INDEX.md` and follow the
       conventions it states for this stack, citing `knowledge/<base>/<file>` when a choice rests on one; without
       any, follow the repository's own conventions (`AGENTS.md`, the nearest code).
 

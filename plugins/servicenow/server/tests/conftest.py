@@ -8,9 +8,9 @@ from mcp import Client
 from mcp.server.mcpserver import MCPServer
 from mcp_types import CallToolResult
 
-from choregos_servicenow.app import Runtime, build_server
-from choregos_servicenow.config import Settings
-from choregos_servicenow.fake import FakeServiceNow
+from tranibor_servicenow.app import Runtime, build_server
+from tranibor_servicenow.config import Settings
+from tranibor_servicenow.fake import FakeServiceNow
 
 
 @pytest.fixture

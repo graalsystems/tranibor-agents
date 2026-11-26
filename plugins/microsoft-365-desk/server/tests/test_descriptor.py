@@ -13,8 +13,8 @@ from mcp import Client
 from mcp.server.mcpserver import MCPServer
 from starlette.testclient import TestClient
 
-from choregos_m365_desk.app import build_app
-from choregos_m365_desk.config import SERVICE_HOSTS, Settings
+from tranibor_m365_desk.app import build_app
+from tranibor_m365_desk.config import SERVICE_HOSTS, Settings
 
 PLUGIN = Path(__file__).resolve().parents[2]
 DESCRIPTOR = PLUGIN / "servers" / "desk.yaml"
@@ -142,7 +142,7 @@ def test_tracker_comment_says_it_writes_nothing() -> None:
     reply to the requester."""
     description = operations()["tracker_comment"]["description"].lower()
     assert "reply" not in description and "requester" in description and "nothing" in description
-    from choregos_m365_desk import app
+    from tranibor_m365_desk import app
 
     source = Path(app.__file__).read_text()
     docstring = source.split("async def tracker_comment", 1)[1].split('"""')[1].lower()

@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 
 #: The credentials the fake instance accepts (they protect nothing: the fake is in memory).
 FAKE_BASE_URL = "https://fake.service-now.test"
-FAKE_USERNAME = "choregos.integration"
+FAKE_USERNAME = "tranibor.integration"
 FAKE_PASSWORD = "fake-password"  # noqa: S105 - the fake's own credential, not a secret
 FAKE_WEBHOOK_SECRET = "fake-webhook-secret"  # noqa: S105 - idem
 #: The platform's token variable, the current core's name first, then an older core's.

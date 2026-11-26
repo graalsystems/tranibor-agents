@@ -3,7 +3,7 @@
 matrix plays them, against this server in-process on its fake, and judged by the core's case judge.
 
 The matrix names a case `plugin:servicenow/<file stem>` and finds it in the offline plugins
-(`CHOREGOS_PLUGINS_OFFLINE`, here this repository's `plugins/`): what `plugin.yaml` declares is what it
+(`TRANIBOR_PLUGINS_OFFLINE`, here this repository's `plugins/`): what `plugin.yaml` declares is what it
 plays. The case's connector `plugin:servicenow/servicenow` is this server, which the core reaches as the
 broker does, over MCP with the platform's bearer token, on the fake registered for it in the process
 (`tranibor_adapters.fakes.plugin_servers.use_fake_plugin_server`). Registered here: the server's own app
@@ -34,9 +34,9 @@ import pytest
 import yaml
 from starlette.applications import Starlette
 
-from choregos_servicenow.app import build_app
-from choregos_servicenow.config import Settings
-from choregos_servicenow.fake import FakeServiceNow, sys_id_of
+from tranibor_servicenow.app import build_app
+from tranibor_servicenow.config import Settings
+from tranibor_servicenow.fake import FakeServiceNow, sys_id_of
 
 eval_doors = pytest.importorskip(
     "tranibor_orchestrator.activities.eval_doors", reason="the core's door player: run in the core's workspace"
@@ -152,7 +152,7 @@ def _journal(fake: FakeServiceNow, number: str, element: str) -> list[str]:
 
 def test_the_matrix_finds_every_case_of_evals_matrix_and_the_server_s_fake() -> None:
     view = offline.catalogue()
-    assert "servicenow" in view.plugins, "the plugin loads (`choregos plugin validate plugins/servicenow`)"
+    assert "servicenow" in view.plugins, "the plugin loads (`tranibor plugin validate plugins/servicenow`)"
     declared = sorted(c.name for c in view.matrix_cases if c.plugin == "servicenow")
     assert declared == sorted(p.stem for p in (PLUGIN / "evals" / "matrix").glob("*.yaml")) == sorted([E3, C1])
     server = view.server(SERVER)

@@ -554,7 +554,7 @@ def test_no_reply_text_reads_a_field_the_agent_writes() -> None:
 
 
 def test_every_m365_request_state_says_its_status_so_a_taken_message_is_never_a_candidate_again() -> None:
-    """The desk tracker lists the mailbox messages not yet categorised `Choregos:*`; a state's tracker status
+    """The desk tracker lists the mailbox messages not yet categorised `Tranibor:*`; a state's tracker status
     is what categorises a message the platform has taken (the desk server's `tracker_set_state`)."""
     workflow = _workflow(M365, "access-request")
     for name, state in workflow.states.items():

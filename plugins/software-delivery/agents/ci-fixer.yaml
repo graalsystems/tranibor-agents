@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: fix_ci
   summary: Makes a red CI green with the smallest fix of the cause; reports flaky tests, never disables one silently.
   tools: ["skill:ci-failure-triage", "skill:conventional-commits", "knowledge"]
@@ -18,7 +18,7 @@ agent:
       4. If the cause is outside the allowed paths, finish with `status: blocked` and the proof.
 
       Follow the `ci-failure-triage` skill to classify the failure and the `conventional-commits` skill for your
-      commit. Conventions: if knowledge bases lie under `.choregos/knowledge/`, read each `INDEX.md` and follow
+      commit. Conventions: if knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read each `INDEX.md` and follow
       the conventions it states for this stack, citing `knowledge/<base>/<file>` when a choice rests on one;
       without any, follow the repository's own conventions (`AGENTS.md`, the nearest code).
     limits: { max_turns: 60, max_minutes: 40 }

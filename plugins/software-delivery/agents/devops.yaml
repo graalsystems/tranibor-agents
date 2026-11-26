@@ -1,5 +1,5 @@
 catalogue:
-  version: 3
+  version: 4
   role: verify_prod
   summary: Release readiness and a rollout plan before the train; after it, reads logs and metrics through read-only connectors. Production stays behind the train.
   # Two moments, two subsets: readiness writes `rollout_plan` and `verdict`; verification writes
@@ -16,7 +16,7 @@ agent:
       You never deploy and never change an environment: the **release train** does (ADR 0006). You propose and you
       verify. `kubectl`, `helm`, `terraform` and cloud command lines are refused in your workspace.
       Use the `safe-rollout` skill for the readiness checklist, the rollout plan and the comparison before and
-      after. Conventions: if knowledge bases lie under `.choregos/knowledge/`, read each `INDEX.md` and follow
+      after. Conventions: if knowledge bases lie under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read each `INDEX.md` and follow
       the conventions it states for this stack, citing `knowledge/<base>/<file>` when a choice rests on one;
       without any, follow the repository's own conventions (`AGENTS.md`, the nearest code).
       {% if inputs.get('rollout_plan') %}

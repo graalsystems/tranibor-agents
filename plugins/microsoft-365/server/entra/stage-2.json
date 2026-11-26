@@ -1,5 +1,5 @@
 {
-  "displayName": "choregos-microsoft-365",
+  "displayName": "tranibor-microsoft-365",
   "signInAudience": "AzureADMyOrg",
   "requiredResourceAccess": [
     {
@@ -18,7 +18,7 @@
   ],
   "web": {
     "redirectUris": [
-      "https://choregos.example.com/api/v1/me/connected-accounts/callback"
+      "https://tranibor.example.com/api/v1/me/connected-accounts/callback"
     ],
     "implicitGrantSettings": {
       "enableAccessTokenIssuance": false,

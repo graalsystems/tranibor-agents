@@ -2,7 +2,7 @@
 """The ServiceNow server against a real instance (the plan's P1: the ITSM family was proven only on its fake).
 
 Each test goes through the MCP protocol and the server's own client to the instance, and writes only
-records it files, tagged `[choregos-live <run>]`. First run: a Personal Developer Instance on the Australia
+records it files, tagged `[tranibor-live <run>]`. First run: a Personal Developer Instance on the Australia
 release (`glide-australia-02-11-2026__patch7`), 2026-11-21, both as a user holding only the procedure's
 role and as one holding `itil`, by basic authentication and by OAuth client credentials.
 """
@@ -14,9 +14,9 @@ from typing import Any
 
 from mcp import Client
 
-from choregos_servicenow.app import Runtime, build_server
-from choregos_servicenow.config import Settings
-from choregos_servicenow.query import eq
+from tranibor_servicenow.app import Runtime, build_server
+from tranibor_servicenow.config import Settings
+from tranibor_servicenow.query import eq
 
 from ..conftest import Mcp
 from .conftest import GROUP, RUN, TAG, Admin, LiveMcp, live_env
@@ -106,7 +106,7 @@ async def test_an_incident_through_the_tracker_profile(mcp: LiveMcp, admin: Admi
     # second, but the same on every read, and the writer's newest status is the reader's.
     order = [(c["ts"], c["id"]) for c in item["comments"]]
     assert order == sorted(order), order
-    statuses = [b.split("\n")[0] for b in bodies if "[choregos-status:status]" in b]
+    statuses = [b.split("\n")[0] for b in bodies if "[tranibor-status:status]" in b]
     assert sorted(statuses) == ["Stage: review", "Stage: triage"], statuses  # each once
     newest = await mcp.call("tracker_upsert_status", key=key, markdown=statuses[-1], marker="status")
     assert newest["written"] is False

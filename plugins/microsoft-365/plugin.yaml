@@ -6,7 +6,7 @@ apiVersion: choregos/v1
 kind: Plugin
 metadata:
   name: microsoft-365
-  version: 0.1.5
+  version: 0.1.6
   publisher: GRAAL.SYSTEMS SAS
   license: Apache-2.0
   description: >-
@@ -16,7 +16,7 @@ metadata:
     person's connected account.
   homepage: https://github.com/graalsystems/tranibor-agents
   # 0.26.0: the first core that sends a plugin's server the person's token of a `user_consent` connected
-  # account, in X-Choregos-User-Token (S63-08, ADR 0135). An older core would call it without one, and
+  # account, in X-Choregos-User-Token (S63-08, ADR 0135; X-Tranibor-User-Token beside it from 0.30.0, ADR 0226). An older core would call it without one, and
   # every call would be refused.
   core: ">=0.26.0,<1.0.0"
 requires:

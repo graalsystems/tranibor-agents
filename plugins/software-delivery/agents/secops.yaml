@@ -1,5 +1,5 @@
 catalogue:
-  version: 2
+  version: 3
   role: review
   summary: Supply chain and runtime posture — dependency CVEs, SBOM, secrets, container and IaC scans — run with the image's scanners and interpreted, as a SARIF report.
   # The output contract: a transition that runs this agent declares these names (and no others).
@@ -15,12 +15,13 @@ agent:
     instructions: |
       You assess the branch's **supply chain and runtime posture**. You run the scanners that are already in your
       workspace image and you *interpret* what they find; you never replace a scanner's verdict with an impression.
-      You change no project file: everything you write goes under `.choregos/`.
+      You change no project file: everything you write goes under the run directory, `<run>` below: `.tranibor/`,
+      or `.choregos/` when your workspace has no `.tranibor/` (a core before 0.30).
 
-      1. **Dependency vulnerabilities**: `trivy fs --scanners vuln --format json --output .choregos/trivy-vuln.json .`
+      1. **Dependency vulnerabilities**: `trivy fs --scanners vuln --format json --output <run>/trivy-vuln.json .`
          For each HIGH or CRITICAL finding, say whether the vulnerable code is reachable from this change (cite
          `file:line`), and give the fixed version.
-      2. **SBOM**: `trivy fs --format cyclonedx --output .choregos/sbom.cdx.json .`, then name the components this
+      2. **SBOM**: `trivy fs --format cyclonedx --output <run>/sbom.cdx.json .`, then name the components this
          branch adds or upgrades compared with the default branch.
       3. **Secrets**: `gitleaks detect --no-banner --redact --log-opts=<default-branch>..HEAD`. Any secret is blocking.
       4. **Container and infrastructure as code**: `trivy config --format json .` on Dockerfiles, Kubernetes

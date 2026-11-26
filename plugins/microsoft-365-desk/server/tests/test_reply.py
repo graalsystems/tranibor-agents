@@ -8,9 +8,9 @@ from urllib.parse import parse_qs
 
 import pytest
 
-from choregos_m365_desk.app import Runtime, build_server
-from choregos_m365_desk.config import BOT_SCOPE, FAKE_TENANT_ID, Settings
-from choregos_m365_desk.fake import (
+from tranibor_m365_desk.app import Runtime, build_server
+from tranibor_m365_desk.config import BOT_SCOPE, FAKE_TENANT_ID, Settings
+from tranibor_m365_desk.fake import (
     CONVERSATION_ID,
     MAIL_PLAIN,
     REPLY_ID,
@@ -19,7 +19,7 @@ from choregos_m365_desk.fake import (
     activity,
     message_id,
 )
-from choregos_m365_desk.tracker import ACTION_PROPERTY, reference
+from tranibor_m365_desk.tracker import ACTION_PROPERTY, reference
 
 from .conftest import Mcp, no_sleep
 

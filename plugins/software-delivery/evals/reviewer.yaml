@@ -2,6 +2,7 @@ agent: reviewer
 description: Fresh eyes, classified remarks, verdict.
 must_contain:
 - code-review
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - you change nothing
 - correctness

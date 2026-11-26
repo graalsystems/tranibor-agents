@@ -46,7 +46,7 @@ KEYS_REFRESH_MIN_S = 300
 KEYS_RETRY_AFTER_FAILURE_S = 30
 LEEWAY_S = 300
 
-log = structlog.get_logger("choregos_m365_desk.botauth")
+log = structlog.get_logger("tranibor_m365_desk.botauth")
 
 
 class BotAuth:

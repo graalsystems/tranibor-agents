@@ -14,7 +14,7 @@ It answers every host the server calls, as the server calls it:
   Graph would.
 
 The seed, at fixed dates: three Inbox messages — a plain-text one, an HTML one (styles, a script, a
-remote image, entities) and one already categorised `Choregos: In progress` — and a Teams thread whose
+remote image, entities) and one already categorised `Tranibor: In progress` — and a Teams thread whose
 root message and one reply mention the bot.
 """
 
@@ -245,7 +245,7 @@ class FakeMicrosoft:
             KIM,
             "Kim starts on Monday and needs a laptop.",
             received="2026-11-18T08:00:00Z",
-            categories=["Choregos: In progress", "Blue category"],
+            categories=["Tranibor: In progress", "Blue category"],
         )
         mention = {
             "id": 0,

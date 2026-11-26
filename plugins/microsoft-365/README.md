@@ -8,7 +8,7 @@ their delegated permissions only. It is generic: any assistant binds a need to i
 | Manifest | [`plugin.yaml`](plugin.yaml) | `microsoft-365` 0.1.5, core `>=0.26.0,<1.0.0` (the first core that sends a plugin's server the person's `user_consent` token, ADR 0135) |
 | Server | [`servers/microsoft-365.yaml`](servers/microsoft-365.yaml), [`server/`](server) | three reads over Graph, and its `fake` for the eval matrix |
 | Procedure | [`procedures/connector.mcp.microsoft-365.md`](procedures/connector.mcp.microsoft-365.md) | the Entra application, its consent, the connector's `user_consent` settings |
-| Entra check | [`server/entra/`](server/entra), `python -m choregos_microsoft_365.entra` | the reference application of each stage, and the check that an application asks exactly its stage's permissions |
+| Entra check | [`server/entra/`](server/entra), `python -m tranibor_microsoft_365.entra` | the reference application of each stage, and the check that an application asks exactly its stage's permissions |
 
 ```sh
 tranibor plugin validate plugins/microsoft-365
@@ -22,8 +22,9 @@ tranibor plugin pack plugins/microsoft-365 -o microsoft-365-0.1.5.tar.gz   # sam
 The connector declares `identity_modes: [user_consent]`: each person connects their own Microsoft 365
 account once in the console (`/me/connected-accounts`), the platform seals the refresh token in their
 personal space and draws an access token for each call. It sends that token to the server in
-`X-Choregos-User-Token`, next to the platform's own bearer token (`TRANIBOR_SERVER_TOKEN`), which
-authenticates Tranibor to the server.
+`X-Tranibor-User-Token`, next to the platform's own bearer token (`TRANIBOR_SERVER_TOKEN`), which
+authenticates Tranibor to the server. A core before 0.30.0 names the header `X-Choregos-User-Token` (the
+core's ADR 0226): the server reads the new one first, the former when it is absent (0.1.6).
 
 - The person's token is the only credential the server sends to Graph, and only to
   `https://graph.microsoft.com/v1.0` (a next page elsewhere is refused; no redirect is followed).
@@ -63,7 +64,7 @@ the person has not connected their account: the call never reaches the server.
 | 2 | `Calendars.Read`, `offline_access` | `list_events_with` (the others answer `forbidden`) |
 | 3 | stage 2, `Mail.Read`, `Chat.Read` | all three |
 
-Never an application permission. `python -m choregos_microsoft_365.entra --stage <2|3> app.json` checks the
+Never an application permission. `python -m tranibor_microsoft_365.entra --stage <2|3> app.json` checks the
 application as Entra holds it (`az ad app show`) against its stage: exactly these permissions, single
 tenant, the platform's callback as its only redirect URI, no implicit grant, no public client.
 
@@ -80,5 +81,9 @@ person's token on the fake.
 cd plugins/microsoft-365/server
 uv sync --all-extras --dev
 uv run ruff check . && uv run mypy --strict src && uv run pytest -q
-M365_FAKE=1 TRANIBOR_SERVER_INSECURE_DEV=1 uv run choregos-microsoft-365   # local demo, port 8080
+M365_FAKE=1 TRANIBOR_SERVER_INSECURE_DEV=1 uv run tranibor-microsoft-365   # local demo, port 8080
 ```
+
+The package is `tranibor_microsoft_365` and the command `tranibor-microsoft-365` from 0.1.6; the former
+`choregos_microsoft_365` (`python -m choregos_microsoft_365.entra` included) and `choregos-microsoft-365`
+stay as aliases for the core's ADR 0226 window.

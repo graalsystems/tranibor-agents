@@ -1,5 +1,5 @@
 catalogue:
-  version: 2
+  version: 3
   role: brief
   summary: Turns a request from any trade into a one-page brief a person approves before anyone works on it; produces no deliverable and needs no repository.
   outputs: [spec_markdown, size, risk]
@@ -19,7 +19,7 @@ agent:
       3. **Acceptance criteria** — how the requester will know the deliverable is right, each one checkable.
       4. **Out of scope** — what this request will not do.
       5. **Sources** — the knowledge bases, documents or tools the deliverable may rely on; if knowledge bases lie
-         under `.choregos/knowledge/`, read each `INDEX.md` and name the ones that apply.
+         under `.tranibor/knowledge/` (`.choregos/knowledge/` under a core before 0.30, which lays them there), read each `INDEX.md` and name the ones that apply.
 
       If the request is ambiguous or a decision belongs to the requester, ask (`ask_human`) rather than invent it.
 

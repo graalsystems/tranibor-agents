@@ -36,12 +36,12 @@ Every tool answers a JSON object (MCP `structuredContent`); a refused call answe
 | `TrackerAdapter` | Tool | Mail | Teams |
 |:--|:--|:--|:--|
 | `fetch_item(key)` | `tracker_fetch_item` | the message | the channel message (Graph, RSC) |
-| `list_candidates(project)` | `tracker_list_candidates` | Inbox, not categorised `Choregos:*` | none (events only) |
+| `list_candidates(project)` | `tracker_list_candidates` | Inbox, not categorised `Tranibor:*` (nor the former `Choregos:*`) | none (events only) |
 | webhook | `tracker_parse_event` | — | a Bot Connector activity, its JWT verified |
 | `create_item(data)` | `tracker_create_item` | refused | refused |
-| `set_state(key, mapping)` | `tracker_set_state` | category `Choregos: <status>` | no-op |
+| `set_state(key, mapping)` | `tracker_set_state` | category `Tranibor: <status>` | no-op |
 | `upsert_status_comment(key, markdown, marker)` | `tracker_upsert_status` | extended property | no-op |
-| `close_item(key)` | `tracker_close` | category `Choregos: Done` | no-op |
+| `close_item(key)` | `tracker_close` | category `Tranibor: Done` | no-op |
 | `comment(key, markdown)` | `tracker_comment` | nothing (no-op) | nothing (no-op) |
 | — (an agent's governed write) | `reply` | a reply to the requester | a reply in the thread |
 
@@ -71,8 +71,9 @@ Input: `{"key": "mail:<id>"}`
 - `title` is the subject (at most 300 characters); `body` the body as plain text (HTML reduced to text:
   no tag, style, script or image, entities decoded; at most 8000 characters). Attachments are never read:
   `fields.has_attachments` says there are some.
-- `state` is the `Choregos: <state>` category, `New` without one; `labels` is `[start label]`
-  (`M365_DESK_START_LABEL`, `agent-ready` by default) while the message has no `Choregos:` category, `[]`
+- `state` is the `Tranibor: <state>` category (or the former `Choregos: <state>`, which a server before
+  0.1.3 wrote), `New` without one; `labels` is `[start label]`
+  (`M365_DESK_START_LABEL`, `agent-ready` by default) while the message has no such category, `[]`
   after.
 - A Teams item: `title` the message's subject or its first line, `body` its text without the bot's
   mention, `author` the sender's display name (Graph gives no UPN here), `url` its `webUrl`, `item_type`
@@ -86,14 +87,14 @@ at most 10 pages of 50 Inbox messages are read. Without a mailbox: `{"keys": [],
 
 Not a candidate:
 
-- a message categorised `Choregos: …`: the platform took it (`tracker_set_state` categorises every
+- a message categorised `Tranibor: …` (or `Choregos: …`): the platform took it (`tracker_set_state` categorises every
   message the platform mirrors a state to, and only those);
 - an automatic message: an `Auto-Submitted` header other than `no` (RFC 3834; `internetMessageHeaders`,
   read on each candidate with the `$select` and `$expand` Graph documents for one message — never on the
   list, where it documents neither),
   or a message class (PidTagMessageClass, `String 0x001A`) of an out-of-office reply
   (`IPM.Note.Rules.OofTemplate…`) or a report (`REPORT.…`, delivery reports);
-- a follow-up: a message of a conversation in which a message is categorised `Choregos: …`, among the
+- a follow-up: a message of a conversation in which a message is categorised `Tranibor: …` (or `Choregos: …`), among the
   mailbox's 200 newest messages of every folder (one extra request). A follow-up to a thread taken
   longer ago than that becomes a candidate again.
 
@@ -129,17 +130,22 @@ Output: `{"verified": true, "events": [{"kind": "tracker.item.created", "item_ke
 ## `tracker_set_state`, `tracker_upsert_status`, `tracker_close`
 
 - `tracker_set_state {key, status, label, remove_labels}` → `{key, changed, state, ignored}`: the
-  message's `Choregos:` category becomes `Choregos: <status>` (control characters, `,` and `;` replaced,
-  at most 60 characters); the other categories are kept. Without `status`, the state is the one the label
-  names (`choregos:triage` → `Choregos: triage`, any other label as it is): the core's `mirror_state`
+  message's `Tranibor:` category becomes `Tranibor: <status>` (control characters, `,` and `;` replaced,
+  at most 60 characters); a former `Choregos:` category is replaced the same way, never kept beside; the
+  other categories are kept. Without `status`, the state is the one the label names (`tranibor:triage` →
+  `Tranibor: triage`, and the `choregos:triage` of a core before 0.30.0 likewise; any other label as it
+  is): the core's `mirror_state`
   always sends a label, and a status only when the workflow maps one. `label` (when a status is given)
   and `remove_labels` are reported in `ignored`. With the current state, `changed: false`; with neither
   status nor label, nothing is read and `changed: false, state: null`.
 - `tracker_upsert_status {key, markdown, marker}` → `{key, written}`: the text is kept in the single-value
-  extended property `String {793633a1-729c-497c-930e-276450befa92} Name choregos-status-<marker>` of the
-  message — never sent, never shown to the requester; written only when it changed.
-- `tracker_close {key, close_notes, close_code}` → `{key, closed, state}`: `Choregos: Done`, once
-  (`closed: false` when already done). Nothing is sent to the requester; the notes are not kept.
+  extended property `String {793633a1-729c-497c-930e-276450befa92} Name tranibor-status-<marker>` of the
+  message — never sent, never shown to the requester; written only when it changed. The current text is
+  read there first, then under the marker's twin (`tranibor:status` for the `choregos:status` the core
+  hands until its ADR 0226 window closes, and the reverse), then under the former property name
+  `choregos-status-…`, which a server before 0.1.3 wrote.
+- `tracker_close {key, close_notes, close_code}` → `{key, closed, state}`: `Tranibor: Done`, once
+  (`closed: false` when already done, `Choregos: Done` included). Nothing is sent to the requester; the notes are not kept.
 
 ## `tracker_comment` and `reply`
 
@@ -156,7 +162,8 @@ Output: `{"verified": true, "events": [{"kind": "tracker.item.created", "item_ke
 Idempotence, per `action_key`:
 
 - **Mail**: before sending, Sent Items is searched for a message carrying the single-value extended
-  property `String {793633a1-729c-497c-930e-276450befa92} Name choregos-action` equal to the action key;
+  property `String {793633a1-729c-497c-930e-276450befa92} Name tranibor-action` (or the former
+  `choregos-action`, which a server before 0.1.3 wrote) equal to the action key;
   found, nothing is sent (`sent: false`). Drafts is searched next: a draft carrying it (an attempt cut
   between `createReply` and `send`) is sent instead of a new one. Otherwise one `createReply` whose
   `message` carries the recipient, the body (as `text`) and the property — the draft is born marked, so an

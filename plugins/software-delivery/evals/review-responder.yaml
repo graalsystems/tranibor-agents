@@ -5,6 +5,7 @@ inputs:
 must_contain:
 - code-review
 - conventional-commits
+- .tranibor/knowledge/
 - .choregos/knowledge/
 - totals.py:12 rounds twice
 - every `blocking` remark

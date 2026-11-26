@@ -47,7 +47,7 @@ config_schema:
     webhook_secret:
       type: string
       minLength: 32
-      description: The shared secret the Business Rule sends in X-Choregos-Secret.
+      description: The shared secret the Business Rule sends in X-Tranibor-Secret (X-Choregos-Secret from a rule set up before 0.2.22).
       x-env: SERVICENOW_WEBHOOK_SECRET
     assignment_groups:
       type: array
@@ -123,7 +123,7 @@ webhook:
   path: /events
 
 # How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
-# switches it to its seeded in-memory instance (server/src/choregos_servicenow/config.py), which no
+# switches it to its seeded in-memory instance (server/src/tranibor_servicenow/config.py), which no
 # configuration field reaches, and the one scene that instance serves. The platform adds its own token
 # (TRANIBOR_SERVER_TOKEN) and nothing of the configuration; TRANIBOR_SERVER_INSECURE_DEV is not needed.
 fake:

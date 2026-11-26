@@ -9,6 +9,9 @@
 - `unauthorized`: UniFi refused the API key (wrong, revoked, or not an Integration API key).
 - `forbidden`: the key is valid but its rights do not cover the call.
 - `not_found`, `rate_limited`, `upstream_error`: what UniFi answered, or that it could not be reached.
+- `timeout`, `response_too_large`: the console (or, in cloud mode, the connector's 25 s) did not answer in time;
+  the connector's 10 MB response limit was hit. `rate_limited` also covers the client-side throttle of the
+  connector's 100 requests per minute per console: nothing was sent then.
 """
 
 from __future__ import annotations
@@ -23,6 +26,8 @@ Code = Literal[
     "forbidden",
     "not_found",
     "rate_limited",
+    "timeout",
+    "response_too_large",
     "upstream_error",
 ]
 

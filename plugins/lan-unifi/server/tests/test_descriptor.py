@@ -44,12 +44,28 @@ def test_the_rest_of_the_descriptor() -> None:
         p.get("title") and p.get("description") and p.get("x-help") and p.get("x-link") for p in properties.values()
     )
     assert {p["x-env"] for p in properties.values()} == {
+        "UNIFI_CONNECTION",
+        "UNIFI_CONSOLE_ID",
         "UNIFI_BASE_URL",
         "UNIFI_API_KEY",
         "UNIFI_CA_CERTIFICATE",
         "UNIFI_SITE_MANAGER_URL",
         "UNIFI_SITE_MANAGER_API_KEY",
     }
+
+
+def test_the_connection_is_a_choice_of_constants_that_defaults_to_local_and_the_cloud_fields_exist() -> None:
+    d = descriptor()
+    connection = d["config_schema"]["properties"]["connection"]
+    assert connection["default"] == "local"
+    assert [c["const"] for c in connection["oneOf"]] == ["local", "cloud"]
+    assert all(c["title"] for c in connection["oneOf"])
+    assert d["config_schema"]["required"] == ["connection"]
+    assert "console_id" in d["config_schema"]["properties"]
+    # api.ui.com is the one host of the cloud connection, opened from this field by the platform.
+    assert d["config_schema"]["properties"]["site_manager_url"]["enum"] == ["https://api.ui.com"]
+    front = yaml.safe_load(PROCEDURE.read_text().split("---")[1])
+    assert {"connection", "console_id"} <= set(front["fields"])
 
 
 def test_the_procedure_describes_every_secret_field() -> None:

@@ -29,6 +29,8 @@ from typing import Any
 
 import httpx
 
+from .config import FAKE_CONSOLE_ID
+
 SITE = "11111111-1111-4111-8111-111111111111"
 GATEWAY = "aaaaaaaa-0000-4000-8000-000000000001"
 SWITCH = "aaaaaaaa-0000-4000-8000-000000000002"
@@ -200,6 +202,13 @@ class FakeUnifi:
         if not (request.headers.get("X-API-KEY") or request.headers.get("X-API-Key")):
             return _json(401, {"statusCode": 401, "message": "Unauthorized"})
         if request.url.host == "api.ui.com":
+            connector = f"/v1/connector/consoles/{FAKE_CONSOLE_ID}"
+            if request.url.path.startswith("/v1/connector/"):
+                # The official connector: it proxies `<id>/<path>` to the console's `/proxy/<path>`.
+                if not request.url.path.startswith(connector + "/network/integration/v1/"):
+                    return _json(404, {"httpStatusCode": 404, "message": "Console not found"})
+                path = request.url.path.removeprefix(connector + "/network/integration")
+                return self._local(request.method, path, request.url.params, body)
             return self._cloud(request)
         prefix = "/proxy/network/integration"
         if not request.url.path.startswith(prefix + "/v1/"):

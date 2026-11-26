@@ -18,22 +18,46 @@ paths: {mcp: /mcp, health: /healthz}
 config_schema:
   type: object
   additionalProperties: false
-  required: [base_url, api_key]
+  required: [connection]
   properties:
+    connection:
+      type: string
+      title: How to reach the console
+      default: local
+      oneOf:
+        - const: local
+          title: Local - the console's own address (base_url and api_key)
+        - const: cloud
+          title: Cloud connector - through Ubiquiti's api.ui.com (console_id, site_manager_url and site_manager_api_key)
+      description: >-
+        local: the platform reaches the console on its own address with an Integration API key. cloud: Ubiquiti's
+        official cloud connector (Site Manager API) relays every call to the console, which then needs neither a
+        public address nor a private route; the only host reached is api.ui.com.
+      x-env: UNIFI_CONNECTION
+      x-help: "Pick cloud for a console that has no public address and that the platform has no private route to (console firmware 5.0.3 or later; 100 requests a minute per console, 25 s a call, 10 MB an answer). The same tools run in both."
+      x-link: https://developer.ui.com/site-manager/
+    console_id:
+      type: string
+      title: Console ID (cloud only)
+      pattern: "^[A-Za-z0-9:_-]{8,128}$"
+      description: The console's id in the Site Manager, e.g. 0A1B2C3D4E5F...:1234567890. Needed when the connection is cloud, ignored otherwise.
+      x-env: UNIFI_CONSOLE_ID
+      x-help: "It is the id of the console in GET https://api.ui.com/v1/hosts with the Site Manager key (the id field of its entry), or shown at unifi.ui.com."
+      x-link: https://developer.ui.com/site-manager/
     base_url:
       type: string
-      title: Console URL
+      title: Console URL (local only)
       format: uri
       pattern: "^https://"
-      description: The UniFi console (UniFi OS) the Integration API is served on, e.g. https://unifi.example.com, without a path.
+      description: "Local connection: the UniFi console (UniFi OS) the Integration API is served on, e.g. https://unifi.example.com, without a path. Ignored for the cloud connector."
       x-env: UNIFI_BASE_URL
       x-help: The address the platform reaches the console on over HTTPS. A console on a private network needs a way in the platform does not offer yet (see the plugin's README).
       x-link: https://developer.ui.com/network/
     api_key:
       type: string
-      title: Integration API key
+      title: Integration API key (local only)
       minLength: 16
-      description: The Integration API key created in UniFi Network, Settings, Control Plane, Integrations (sent as X-API-KEY).
+      description: "Local connection: the Integration API key created in UniFi Network, Settings, Control Plane, Integrations (sent as X-API-KEY)."
       x-env: UNIFI_API_KEY
       x-help: Create it with a dedicated account whose role is read-only first; the key has the rights of that account. It is shown once.
       x-link: https://developer.ui.com/network/
@@ -51,7 +75,7 @@ config_schema:
       type: string
       title: Site Manager URL
       enum: ["https://api.ui.com"]
-      description: Set to https://api.ui.com, with site_manager_api_key, to enable the cloud firmware tool. Leave empty for local data only.
+      description: "Set to https://api.ui.com, with site_manager_api_key, to enable the cloud firmware tool on a local connection. Leave empty for local data only. The cloud connection needs it: the platform opens the egress (api.ui.com:443) from this field."
       x-env: UNIFI_SITE_MANAGER_URL
       x-help: "Optional. Goes with site_manager_api_key (both or neither)."
       x-link: https://developer.ui.com/site-manager/
@@ -59,13 +83,14 @@ config_schema:
       type: string
       title: Site Manager API key
       minLength: 16
-      description: A Site Manager API key (unifi.ui.com, API), read only. Optional.
+      description: A Site Manager API key (unifi.ui.com, API). Required by the cloud connection, where it is the only credential and reaches the console through the connector (an organization key reaches every console of the organization, a personal key only its owner's). Optional on a local connection, for the cloud firmware tool.
       x-env: UNIFI_SITE_MANAGER_API_KEY
-      x-help: Optional. It lists the hosts, sites and devices of the account; leave it out to keep every call local.
+      x-help: Cloud connection - required; prefer a key made for this connector alone. Local connection - optional; leave it out to keep every call local.
       x-link: https://developer.ui.com/site-manager/
 secret_fields: [api_key, site_manager_api_key]
 
-# The only hosts the server may reach: the console, and the Site Manager when it is configured.
+# The only hosts the server may reach: the console (local), and the Site Manager when it is configured.
+# On the cloud connection the console's own address is never used: the egress is api.ui.com:443 alone.
 egress:
   from_fields: [base_url, site_manager_url]
 

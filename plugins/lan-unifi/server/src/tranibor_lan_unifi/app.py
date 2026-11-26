@@ -158,7 +158,17 @@ class Runtime:
             self.fake = FakeUnifi(clock() if clock else None)
             transport = httpx.MockTransport(self.fake)
         verify = settings.ssl_context() if transport is None else True
-        controller = Controller(settings.base_url, settings.api_key.get_secret_value(), transport, verify)
+        if settings.cloud_connection and settings.site_manager_api_key is not None:
+            # Same client, same tools: only the base (api.ui.com, through the connector) and the key differ.
+            controller = Controller(
+                settings.site_manager_url,
+                settings.site_manager_api_key.get_secret_value(),
+                transport,
+                True,
+                console_id=settings.console_id,
+            )
+        else:
+            controller = Controller(settings.base_url, settings.api_key.get_secret_value(), transport, verify)
         cloud = None
         if settings.cloud_enabled and settings.site_manager_api_key is not None:
             cloud = SiteManager(

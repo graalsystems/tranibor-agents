@@ -7,6 +7,10 @@
     TRANIBOR_LIVE_UNIFI_SITE_MANAGER_API_KEY=...                         # optional: the cloud tool \\
       uv run pytest tests/live -q
 
+  Through Ubiquiti's cloud connector instead of the console's own address (settles the connector's path):
+
+    TRANIBOR_LIVE_UNIFI_CONSOLE_ID=... TRANIBOR_LIVE_UNIFI_SITE_MANAGER_API_KEY=... uv run pytest tests/live -q
+
 - The reads need a read-only API key. Nothing here writes: restarts, PoE power-cycles, guest
   authorisations and vouchers are exercised on the fake only, and a live write is a person's decision.
 
@@ -41,11 +45,17 @@ def missing(what: str) -> None:
 
 @pytest.fixture(scope="session")
 def live() -> Iterator[Runtime]:
-    if not (_env("BASE_URL") and _env("API_KEY")):
-        missing("TRANIBOR_LIVE_UNIFI_BASE_URL and TRANIBOR_LIVE_UNIFI_API_KEY")
+    cloud = bool(_env("CONSOLE_ID") and _env("SITE_MANAGER_API_KEY"))
+    if not cloud and not (_env("BASE_URL") and _env("API_KEY")):
+        missing(
+            "TRANIBOR_LIVE_UNIFI_BASE_URL and TRANIBOR_LIVE_UNIFI_API_KEY, "
+            "or TRANIBOR_LIVE_UNIFI_CONSOLE_ID and TRANIBOR_LIVE_UNIFI_SITE_MANAGER_API_KEY"
+        )
     env = {
-        "UNIFI_BASE_URL": _env("BASE_URL"),
-        "UNIFI_API_KEY": _env("API_KEY"),
+        "UNIFI_CONNECTION": "cloud" if cloud else "local",
+        "UNIFI_CONSOLE_ID": _env("CONSOLE_ID"),
+        "UNIFI_BASE_URL": "" if cloud else _env("BASE_URL"),
+        "UNIFI_API_KEY": "" if cloud else _env("API_KEY"),
         "UNIFI_CA_CERTIFICATE": _env("CA_CERTIFICATE"),
         "UNIFI_SITE_MANAGER_API_KEY": _env("SITE_MANAGER_API_KEY"),
         "UNIFI_SITE_MANAGER_URL": "https://api.ui.com" if _env("SITE_MANAGER_API_KEY") else "",

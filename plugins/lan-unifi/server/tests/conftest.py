@@ -82,10 +82,12 @@ def mcp(http: TestClient) -> Mcp:
 DESCRIPTOR = Path(__file__).resolve().parents[2] / "servers" / "lan-unifi.yaml"
 
 
-@pytest.fixture
-def lan_target() -> McpTarget:
-    """What the profile's conformance suite drives: this server, in memory, over the UniFi fake."""
-    runtime = Runtime(Settings.from_env({"LAN_UNIFI_FAKE": "1"}), clock=clock)
+@pytest.fixture(params=["local", "cloud"])
+def lan_target(request: pytest.FixtureRequest) -> McpTarget:
+    """What the profile's conformance suite drives: this server, in memory, over the UniFi fake, reached
+    locally and through the cloud connector (the same suite, the same tools, only the way in differs)."""
+    env = {"LAN_UNIFI_FAKE": "1", "UNIFI_CONNECTION": request.param}
+    runtime = Runtime(Settings.from_env(env), clock=clock)
     fake = runtime.fake
     assert isinstance(fake, FakeUnifi)
     return McpTarget(

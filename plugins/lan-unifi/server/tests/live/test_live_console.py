@@ -19,7 +19,7 @@ async def test_devices_statistics_clients_and_networks(live: Runtime) -> None:
     devices = await live.tools.list_devices(site)
     assert devices.devices
     first = devices.devices[0]
-    assert (await live.tools.get_device(site, first.id)).id == first.id
+    assert (await live.tools.get_device(site, first.id)).device.id == first.id
     if first.state == "ONLINE":
         assert (await live.tools.get_device_statistics(site, first.id)).uptime_sec is not None
     await live.tools.list_clients(site)

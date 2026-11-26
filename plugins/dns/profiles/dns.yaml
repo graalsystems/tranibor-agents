@@ -167,8 +167,7 @@ tools:
         name: {type: string}
         type: {type: string}
         value: {type: string}
-        ttl: {type: integer, description: Seconds; 0 or absent is the provider's default.}
-        action_key: {type: string}
+        ttl: {type: integer, minimum: 0, description: "Seconds; 0 or absent is the provider's default. A provider refuses a value outside its own range."}
     output:
       type: object
       required: [zone, created, id, name, type, value, ttl, needs_publish]
@@ -196,7 +195,7 @@ tools:
         zone: {type: string}
         id: {type: string}
         value: {type: string}
-        ttl: {type: integer}
+        ttl: {type: integer, minimum: 0}
     output:
       type: object
       required: [zone, id, changed, name, type, value, ttl, previous, needs_publish]
@@ -287,7 +286,7 @@ $defs:
       type: {type: string}
       name: {type: string}
       value: {type: string}
-      ttl: {type: integer}
+      ttl: {type: integer, minimum: 0}
   key:
     type: object
     additionalProperties: false

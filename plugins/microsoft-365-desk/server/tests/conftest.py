@@ -12,9 +12,9 @@ from mcp import Client
 from mcp.server.mcpserver import MCPServer
 from mcp_types import CallToolResult
 
-from choregos_m365_desk.app import Runtime, build_server
-from choregos_m365_desk.config import Settings
-from choregos_m365_desk.fake import FakeMicrosoft
+from tranibor_m365_desk.app import Runtime, build_server
+from tranibor_m365_desk.config import Settings
+from tranibor_m365_desk.fake import FakeMicrosoft
 
 #: The core's checkout, whose normative tracker profile every answer is checked against: `TRANIBOR_CORE`,
 #: else a `tranibor` checkout beside this repository's.

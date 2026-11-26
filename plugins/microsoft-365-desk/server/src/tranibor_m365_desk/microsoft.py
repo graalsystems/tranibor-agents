@@ -34,7 +34,7 @@ TOKEN_MARGIN_S = 120
 MAX_RETRIES = 2
 MAX_RETRY_AFTER_S = 10.0
 
-log = structlog.get_logger("choregos_m365_desk.microsoft")
+log = structlog.get_logger("tranibor_m365_desk.microsoft")
 
 Sleep = Callable[[float], Awaitable[None]]
 

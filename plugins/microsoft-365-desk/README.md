@@ -71,12 +71,12 @@ generic MCP procedure there; the procedure itself is still installed with the pl
 | Tool | Access | What it does |
 |:--|:--|:--|
 | `tracker_fetch_item` | read | a request by key: subject, plain-text body (≤ 8000 characters), requester, link, state. Mail: `mail:<immutable id>`; Teams: `teams:<conversationId>;<activityId>` |
-| `tracker_list_candidates` | read | the Inbox's messages no one took (no `Choregos:` category), newest first, without automatic messages (auto-replies, out-of-office, delivery reports) nor follow-ups of a thread already taken. Teams: none, events only |
+| `tracker_list_candidates` | read | the Inbox's messages no one took (no `Tranibor:` category, nor the former `Choregos:`), newest first, without automatic messages (auto-replies, out-of-office, delivery reports) nor follow-ups of a thread already taken. Teams: none, events only |
 | `tracker_parse_event` | read | a Bot Connector delivery: its JWT verified, a message that mentions the bot in a configured channel becomes `tracker.item.created`; any other message of the channel gives nothing |
 | `tracker_create_item` | write | refused: requests come from the mailbox and the channels |
-| `tracker_set_state` | write | mail: the category `Choregos: <state>` (the status, else the state the label names); Teams: nothing |
+| `tracker_set_state` | write | mail: the category `Tranibor: <state>` (the status, else the state the label names); Teams: nothing |
 | `tracker_upsert_status` | write | mail: Tranibor's status in an extended property of the message, never seen by the requester; Teams: nothing |
-| `tracker_close` | write | mail: `Choregos: Done`; nothing sent; Teams: nothing |
+| `tracker_close` | write | mail: `Tranibor: Done`; nothing sent; Teams: nothing |
 | `tracker_comment` | write, `platform_arguments: [action_key]` | nothing: a successful no-op (below) |
 | `reply` | write, `platform_arguments: [action_key, work_item_key]` | the agent's answer to the requester (a mail to the sender only, or a Teams reply in the thread), plain text ≤ 4000 characters, only in the thread of the action's own work item or of its fan-out parent; refused without a work item. No `human_approval` floor: a write waits for approval by default, and the organisation's policy decides |
 
@@ -86,11 +86,12 @@ fails on the parent's tracker. A child's action may still `reply`: its `work_ite
 its parent's thread.
 
 **Only messages the platform took are categorised.** The core mirrors every state with a label
-(`choregos:<state>` when the workflow maps none) and a status when it maps one; `tracker_set_state`
-writes the category from either, so a taken message leaves the candidates, and an untaken one stays.
+(`tranibor:<state>` when the workflow maps none; `choregos:<state>` from a core before 0.30.0) and a status
+when it maps one; `tracker_set_state` writes the category from either, so a taken message leaves the
+candidates, and an untaken one stays.
 
 **`tracker_comment` writes nothing.** The core's adapter calls it for the platform's own comments on
-the tracker (a human request's question with a console link, the answer to a `/choregos` command…).
+the tracker (a human request's question with a console link, the answer to a `/tranibor` command…).
 Those are for the platform's people, not the requester: on this tracker they are a successful no-op.
 Only `reply`, a governed action's effect whose text a workflow decides, writes in the requester's
 thread.
@@ -151,7 +152,7 @@ thread.
 
 ## The server
 
-`server/` is a Python 3.12 package (`choregos_m365_desk`): MCP over streamable HTTP (stateless, JSON
+`server/` is a Python 3.12 package (`tranibor_m365_desk`): MCP over streamable HTTP (stateless, JSON
 responses) at `/mcp` behind the platform's bearer token (`TRANIBOR_SERVER_TOKEN`), `/healthz` open.
 `M365_DESK_FAKE=1` runs it on a seeded in-memory tenant (`fake.py`): Entra, Graph (the shared mailbox
 with three messages — plain, HTML, already taken — and a Teams thread), the Bot Framework's keys (a test
@@ -163,6 +164,16 @@ cd plugins/microsoft-365-desk/server
 uv sync --all-extras --dev
 uv run ruff check . && uv run ruff format --check . && uv run mypy --strict src && uv run pytest -q
 ```
+
+**The former name, `choregos`** (the core's ADR 0226). From 0.1.3 (plugin 0.1.3) the server writes
+`Tranibor: <state>` categories and the extended properties `tranibor-status-<marker>` and `tranibor-action`.
+What a server before it left in the mailbox is still read: a message categorised `Choregos: …` stays taken,
+with its thread's follow-ups, and its state is read; a state change replaces the former category by the new
+one, so a message never carries two states, and a message closed as `Choregos: Done` is left as it is; a
+status kept in `choregos-status-<marker>` is not written again; a reply marked `choregos-action` is the reply
+already made. An Outlook view, a search folder or a mailbox rule of the desk that keys on `Choregos:` moves to
+`Tranibor:` (or matches both). The package is `tranibor_m365_desk` and the command `tranibor-m365-desk`;
+`choregos_m365_desk` and `choregos-m365-desk` stay as aliases for the core's window.
 
 The tests check every tracker answer against the core's normative profile
 (`packages/contracts/schemas/plugin-tracker-profile.schema.json`) when a core checkout is found

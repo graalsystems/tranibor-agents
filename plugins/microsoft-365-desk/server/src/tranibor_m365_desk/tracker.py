@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """The tracker profile over two intake channels, and the reply to the requester (`TRACKER_PROFILE.md`).
 
-- **The shared mailbox**: each message of its Inbox not yet categorised `Choregos: …` is a candidate;
-  the item's state is its `Choregos: <state>` category, the platform's status note is kept in a
+- **The shared mailbox**: each message of its Inbox not yet categorised `Tranibor: …` is a candidate;
+  the item's state is its `Tranibor: <state>` category, the platform's status note is kept in a
   single-value extended property of the message (never seen by the requester), and closing sets
-  `Choregos: Done`.
+  `Tranibor: Done`.
 - **A Teams channel**: each message that mentions the bot is an event (`tracker_parse_event`, its JWT
   verified); Teams keeps no state of ours, so the state writes are successful no-ops.
 
@@ -36,14 +36,23 @@ from .microsoft import Connector, Graph, segment
 from .text import BODY_MAX, REPLY_MAX, TITLE_MAX, as_teams_markup, body_text, clip, html_to_text, strip_mentions
 
 CREATED = "tracker.item.created"
-#: The category prefix that says Tranibor holds a message: `Choregos: In progress`, `Choregos: Done`.
-CATEGORY_PREFIX = "Choregos:"
+#: The category prefix that says Tranibor holds a message: `Tranibor: In progress`, `Tranibor: Done`.
+CATEGORY_PREFIX = "Tranibor:"
+#: The former prefix (the core's ADR 0226): a message a server before 0.1.3 categorised `Choregos: …` is
+#: still taken, its state still read; a state change replaces that category by the new one, so a message
+#: never carries two states.
+FORMER_CATEGORY_PREFIX = "Choregos:"
+CATEGORY_PREFIXES = (CATEGORY_PREFIX, FORMER_CATEGORY_PREFIX)
 DONE = "Done"
 #: The state of a message no one took yet.
 NEW = "New"
 #: The property set (a GUID of this plugin's own) of the single-value extended properties it writes.
 PROPERTY_SET = "{793633a1-729c-497c-930e-276450befa92}"
-ACTION_PROPERTY = f"String {PROPERTY_SET} Name choregos-action"
+#: The names the plugin gives its extended properties, then the former ones (the core's ADR 0226), still
+#: read: a reply a server before 0.1.3 sent carries `choregos-action`, a status it kept `choregos-status-…`.
+PROPERTY_NAME, FORMER_PROPERTY_NAME = "tranibor", "choregos"
+ACTION_PROPERTY = f"String {PROPERTY_SET} Name {PROPERTY_NAME}-action"
+ACTION_PROPERTIES = (ACTION_PROPERTY, f"String {PROPERTY_SET} Name {FORMER_PROPERTY_NAME}-action")
 IMMUTABLE_IDS = {"Prefer": 'IdType="ImmutableId"'}
 MESSAGE_FIELDS = (
     "id,subject,body,from,sender,webLink,categories,receivedDateTime,lastModifiedDateTime,conversationId,hasAttachments"
@@ -64,11 +73,22 @@ MEMORY = 1024
 _MARKER = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
 _UNSAFE_IN_CATEGORY = re.compile(r"[\x00-\x1f,;]+")
 
-log = structlog.get_logger("choregos_m365_desk.tracker")
+log = structlog.get_logger("tranibor_m365_desk.tracker")
 
 
-def status_property(marker: str) -> str:
-    return f"String {PROPERTY_SET} Name choregos-status-{marker}"
+def status_property(marker: str, name: str = PROPERTY_NAME) -> str:
+    return f"String {PROPERTY_SET} Name {name}-status-{marker}"
+
+
+def status_properties(marker: str) -> list[str]:
+    """Where a status note handed `marker` may be: the property written first, then under the marker's
+    twin (the core hands `choregos:status` until its ADR 0226 window closes, `tranibor:status` after), then
+    the former property name for both."""
+    twins = [marker]
+    for prefix, other in (("choregos:", "tranibor:"), ("tranibor:", "choregos:")):
+        if marker.startswith(prefix):
+            twins.append(other + marker.removeprefix(prefix))
+    return [status_property(m, name) for name in (PROPERTY_NAME, FORMER_PROPERTY_NAME) for m in twins]
 
 
 def reference(action_key: str) -> str:
@@ -77,11 +97,20 @@ def reference(action_key: str) -> str:
 
 
 def state_of(categories: Any) -> str | None:
-    """`Choregos: In progress` → `In progress`; `None` when no category is Tranibor's."""
+    """`Tranibor: In progress` (or the former `Choregos: In progress`) → `In progress`; `None` when no
+    category is Tranibor's."""
     for category in categories if isinstance(categories, list) else []:
-        if isinstance(category, str) and category.startswith(CATEGORY_PREFIX):
-            return category[len(CATEGORY_PREFIX) :].strip() or None
+        prefix = _prefix_of(category)
+        if prefix is not None:
+            return str(category)[len(prefix) :].strip() or None
     return None
+
+
+def _prefix_of(category: Any) -> str | None:
+    """The Tranibor prefix `category` starts with, under either name."""
+    if not isinstance(category, str):
+        return None
+    return next((prefix for prefix in CATEGORY_PREFIXES if category.startswith(prefix)), None)
 
 
 def _odata(value: str) -> str:
@@ -264,10 +293,10 @@ class Desk:
     async def list_candidates(self, limit: int = 50) -> dict[str, Any]:
         """Inbox messages no one took, newest first. Teams items come as events only.
 
-        Not a candidate: a message categorised `Choregos: …` (the platform took it); an automatic one (an
-        `Auto-Submitted` header other than `no`, an out-of-office reply, a delivery report); a follow-up in
-        a conversation where a message is categorised `Choregos: …` among the mailbox's `TAKEN_SCAN` newest
-        (the requester's "thanks" is not a new request)."""
+        Not a candidate: a message categorised `Tranibor: …` or `Choregos: …` (the platform took it); an
+        automatic one (an `Auto-Submitted` header other than `no`, an out-of-office reply, a delivery
+        report); a follow-up in a conversation where a message is so categorised among the mailbox's
+        `TAKEN_SCAN` newest (the requester's "thanks" is not a new request)."""
         if self.settings.mailbox is None:
             return {"keys": [], "reason": "no shared mailbox configured: Teams messages arrive as events only"}
         wanted = max(1, min(limit, MAX_LIST))
@@ -408,9 +437,10 @@ class Desk:
     async def set_state(
         self, key: str, status: str | None, label: str | None, remove_labels: list[str] | None
     ) -> dict[str, Any]:
-        """The category `Choregos: <status>`; without a status, the one the label names. The core's
-        `mirror_state` always sends a label (`choregos:<state>` when the workflow maps none) and a status
-        only when the workflow maps one, so every message the platform took is categorised, and only those.
+        """The category `Tranibor: <status>`; without a status, the one the label names. The core's
+        `mirror_state` always sends a label (`tranibor:<state>` when the workflow maps none, `choregos:<state>`
+        from a core before 0.30.0) and a status only when the workflow maps one, so every message the platform
+        took is categorised, and only those. The former category `Choregos: …` is replaced, never kept beside.
         """
         ignored = (["label"] if label and status else []) + (["remove_labels"] if remove_labels else [])
         unchanged = {"key": _echo(key), "changed": False, "state": None, "ignored": ignored}
@@ -424,9 +454,9 @@ class Desk:
             return unchanged
         categories = [c for c in message.get("categories") or [] if isinstance(c, str)]
         current = state_of(categories)
-        if wanted == current:
+        if wanted == current and f"{CATEGORY_PREFIX} {wanted}" in categories:
             return {**unchanged, "state": current}
-        kept = [c for c in categories if not c.startswith(CATEGORY_PREFIX)]
+        kept = [c for c in categories if _prefix_of(c) is None]
         if not await self._patch_mail(parsed, {"categories": [*kept, f"{CATEGORY_PREFIX} {wanted}"]}):
             return unchanged
         return {**unchanged, "changed": True, "state": wanted}
@@ -440,20 +470,24 @@ class Desk:
             return unwritten
         if not _MARKER.match(marker):
             raise Refused("a marker is 1-80 letters, digits and . _ : -")
-        prop = status_property(marker)
-        message = await self._mail_if_there(
-            parsed, "id", f"singleValueExtendedProperties($filter=id eq '{_odata(prop)}')"
-        )
-        if message is None:
-            return unwritten
-        current = next(
-            (p.get("value") for p in message.get("singleValueExtendedProperties") or [] if isinstance(p, dict)),
-            None,
-        )
+        places = status_properties(marker)
+        current: Any = None
+        for prop in places:  # the new name first: once written there, one read finds it
+            message = await self._mail_if_there(
+                parsed, "id", f"singleValueExtendedProperties($filter=id eq '{_odata(prop)}')"
+            )
+            if message is None:
+                return unwritten
+            current = next(
+                (p.get("value") for p in message.get("singleValueExtendedProperties") or [] if isinstance(p, dict)),
+                None,
+            )
+            if current is not None:
+                break
         text = clip(markdown, MAX_STATUS)
         if current == text:
             return unwritten
-        written = await self._patch_mail(parsed, {"singleValueExtendedProperties": [{"id": prop, "value": text}]})
+        written = await self._patch_mail(parsed, {"singleValueExtendedProperties": [{"id": places[0], "value": text}]})
         return {**unwritten, "written": written}
 
     async def close(self, key: str) -> dict[str, Any]:
@@ -465,9 +499,9 @@ class Desk:
         if message is None:
             return unclosed
         categories = [c for c in message.get("categories") or [] if isinstance(c, str)]
-        if state_of(categories) == DONE:
+        if state_of(categories) == DONE:  # under either prefix: a closed message is left as it is
             return {**unclosed, "state": DONE}
-        kept = [c for c in categories if not c.startswith(CATEGORY_PREFIX)]
+        kept = [c for c in categories if _prefix_of(c) is None]
         if not await self._patch_mail(parsed, {"categories": [*kept, f"{CATEGORY_PREFIX} {DONE}"]}):
             return unclosed
         return {**unclosed, "closed": True, "state": DONE}
@@ -506,21 +540,31 @@ class Desk:
         value = found.get("value")
         return value[0] if isinstance(value, list) and value and isinstance(value[0], dict) else None
 
+    async def _first_of(self, path: str, filters: list[str]) -> dict[str, Any] | None:
+        """The first message `path` holds under the first of `filters` that finds one."""
+        for odata_filter in filters:
+            found = await self._first(path, odata_filter)
+            if found is not None:
+                return found
+        return None
+
     async def _reply_mail(self, key: MailKey, text: str, action: str) -> dict[str, Any]:
         """createReply (the draft born with its recipient, its body and the action's mark, in one call) →
         send. A sent message carrying the action is the reply already made; a draft carrying it (an attempt
         cut short) is sent instead of a new one. The reply goes to the original's sender (`from`) and to
         no one else: not its Reply-To, no Cc, no Bcc."""
         mailbox = self._mailbox()
-        carries_action = (
-            f"singleValueExtendedProperties/Any(ep: ep/id eq '{ACTION_PROPERTY}' and ep/value eq '{_odata(action)}')"
-        )
+        # Under the property's name, or its former one: a reply a server before 0.1.3 sent is the reply made.
+        carries_action = [
+            f"singleValueExtendedProperties/Any(ep: ep/id eq '{prop}' and ep/value eq '{_odata(action)}')"
+            for prop in ACTION_PROPERTIES
+        ]
         stable_id = f"reply:{reference(action)}"
-        sent = await self._first(f"{mailbox}/mailFolders/sentitems/messages", carries_action)
+        sent = await self._first_of(f"{mailbox}/mailFolders/sentitems/messages", carries_action)
         if sent is not None:
             log.info("reply_already_sent", work_item=key.key, channel="mail")
             return {"key": key.key, "channel": "mail", "id": stable_id, "message_id": sent.get("id"), "sent": False}
-        draft = await self._first(f"{mailbox}/mailFolders/drafts/messages", carries_action)
+        draft = await self._first_of(f"{mailbox}/mailFolders/drafts/messages", carries_action)
         if draft is None:
             original = await self._mail_if_there(key, "id,from")
             if original is None:
@@ -602,10 +646,11 @@ def _echo(key: str) -> str:
 
 
 def _state_of_label(label: str | None) -> str | None:
-    """The state a mirrored label names: `choregos:triage` → `triage`; any other label as it is."""
+    """The state a mirrored label names: `tranibor:triage` (or the former `choregos:triage`, from a core
+    before 0.30.0) → `triage`; any other label as it is."""
     if not label:
         return None
-    return label.split(":", 1)[1] if label.lower().startswith("choregos:") else label
+    return label.split(":", 1)[1] if label.lower().startswith(("tranibor:", "choregos:")) else label
 
 
 def _automatic(message: dict[str, Any]) -> bool:

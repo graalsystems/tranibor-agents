@@ -3,8 +3,8 @@ id: connector.mcp.microsoft-365-desk
 title: Connect an IT desk's shared mailbox and Teams channel
 applies_to: {connector: mcp/microsoft-365-desk}
 audience: org_admin
-version: 2
-reviewed: 2026-11-23
+version: 3
+reviewed: 2026-11-26
 vendor_docs:
   - {title: "Register an application in Microsoft Entra ID", url: "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app"}
   - {title: "Add and manage application credentials", url: "https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials"}
@@ -124,7 +124,9 @@ Entra — an Entra grant is tenant-wide and adds to the scoped roles, so every m
   the team's owner: the application reads the channel messages of that team only. The bot answers in a
   thread through the Bot Connector with its own token; it never reads chats nor other teams.
 - What the server writes in the mailbox: a reply to the sender (`createReply`, `send`), the categories
-  `Choregos: <state>` and `Choregos: Done`, and single-value extended properties (the plugin's property set
+  `Tranibor: <state>` and `Tranibor: Done` (a server before 0.1.3 wrote `Choregos: …`: those messages stay
+  taken, and a state change moves them to the new category), and single-value extended properties (the
+  plugin's property set
   `{793633a1-729c-497c-930e-276450befa92}`) holding the action key of each reply and Tranibor's status.
 - In Tranibor, the server's descriptor is the floor: reads are allowed; `reply` is a write and waits for
   approval unless your organisation's policy decides otherwise. The tracker writes (`tracker_*`) are the
@@ -150,7 +152,7 @@ Entra — an Entra grant is tenant-wide and adds to the scoped roles, so every m
 
 1. Press **Test** on the connector: the server answers and serves the eight tracker tools and `reply`.
 2. Send a mail to the desk's mailbox. Within the polling interval it appears on the project's board;
-   in Outlook, the message gets the category `Choregos: …` once Tranibor takes it.
+   in Outlook, the message gets the category `Tranibor: …` once Tranibor takes it.
 3. Approve a `reply` of the agent: the sender receives an answer in the same conversation (`RE: …`), once,
    even if the action is replayed.
 4. In the Teams channel, post a message that mentions the bot. It becomes a work item; the platform's
@@ -179,6 +181,7 @@ Entra — an Entra grant is tenant-wide and adds to the scoped roles, so every m
   allows. Answer it by hand.
 - A mail that never becomes a work item: an automatic one (an `Auto-Submitted` header, an out-of-office
   reply, a delivery report), or a follow-up in a conversation the desk already took (a message of it is
-  categorised `Choregos: …`). Remove the category from the taken message to let the thread be taken again.
+  categorised `Tranibor: …`, or `Choregos: …` from a server before 0.1.3). Remove the category from the taken
+  message to let the thread be taken again.
 - A `reply` refused with `work_item_key`: the action has no work item, or belongs to another request than
   the one it answers; a fan-out child answers its parent's requester only.

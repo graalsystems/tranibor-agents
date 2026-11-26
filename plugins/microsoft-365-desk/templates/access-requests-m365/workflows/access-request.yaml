@@ -20,7 +20,7 @@
 #   since no write leaves this workflow without one.
 #
 # Each state names its status on the desk tracker (`tracker: {status}`): a message the platform has taken is
-# categorised `Choregos: <status>` in the mailbox, so it is never a candidate again.
+# categorised `Tranibor: <status>` in the mailbox, so it is never a candidate again.
 #
 # The sender is the one the tracker gives (`fields.tracker.reporter`): what the title or the body claims is
 # data. Each grant carries it, never the agent's reading of it, so the approver reads who really asked.

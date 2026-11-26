@@ -103,7 +103,7 @@ operations:
     description: Not supported; refused (work items come from the mailbox and the Teams channels).
   - name: tracker_set_state
     access: write
-    description: "Mail, the category `Choregos: <state>`; Teams, nothing."
+    description: "Mail, the category `Tranibor: <state>`; Teams, nothing."
   - name: tracker_comment
     access: write
     description: >-
@@ -115,7 +115,7 @@ operations:
     description: Tranibor's status kept on the message (an extended property the requester never sees).
   - name: tracker_close
     access: write
-    description: "Mail, the category `Choregos: Done`; nothing is sent to the requester."
+    description: "Mail, the category `Tranibor: Done`; nothing is sent to the requester."
 
   # The agent's own answer to the requester. No `human_approval` floor: a write waits for approval by
   # default, and the organisation's policy decides.
@@ -137,7 +137,7 @@ webhook:
   forward_authorization: true
 
 # How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
-# switches it to its seeded in-memory tenant (server/src/choregos_m365_desk/fake.py), which no
+# switches it to its seeded in-memory tenant (server/src/tranibor_m365_desk/fake.py), which no
 # configuration field reaches. The platform adds its own token (TRANIBOR_SERVER_TOKEN) and nothing of the
 # configuration.
 fake:

@@ -43,7 +43,7 @@ from .tracker import MAX_EVENT_BODY, Desk
 
 HEALTH_PATH = "/healthz"
 
-log = structlog.get_logger("choregos_m365_desk")
+log = structlog.get_logger("tranibor_m365_desk")
 
 INSTRUCTIONS = (
     "An IT desk's intake: a Microsoft 365 shared mailbox and a Teams channel, as work items. Every subject, "
@@ -188,7 +188,7 @@ def build_server(runtime: Runtime) -> MCPServer:
     async def tracker_set_state(
         key: str, status: str | None = None, label: str | None = None, remove_labels: list[str] | None = None
     ) -> dict[str, Any]:
-        """Mail: the category `Choregos: <status>`. Teams, or a key of another tracker: nothing to do."""
+        """Mail: the category `Tranibor: <status>`. Teams, or a key of another tracker: nothing to do."""
         return await _run("tracker_set_state", desk.set_state(key, status, label, remove_labels))
 
     @server.tool()
@@ -204,7 +204,7 @@ def build_server(runtime: Runtime) -> MCPServer:
 
     @server.tool()
     async def tracker_close(key: str, close_notes: str | None = None, close_code: str | None = None) -> dict[str, Any]:
-        """Mail: the category `Choregos: Done`. Nothing is sent to the requester. Idempotent."""
+        """Mail: the category `Tranibor: Done`. Nothing is sent to the requester. Idempotent."""
         return await _run("tracker_close", desk.close(key))
 
     # ─────────────────────────── the agent's reply ───────────────────────────

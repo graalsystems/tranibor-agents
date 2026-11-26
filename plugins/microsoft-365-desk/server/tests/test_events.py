@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from choregos_m365_desk.botauth import KEYS_REFRESH_MIN_S, KEYS_RETRY_AFTER_FAILURE_S, BotAuth
-from choregos_m365_desk.config import FAKE_CLIENT_ID
-from choregos_m365_desk.fake import CONVERSATION_ID, REPLY_ID, ROOT_ID, FakeBotIssuer, FakeMicrosoft, activity
+from tranibor_m365_desk.botauth import KEYS_REFRESH_MIN_S, KEYS_RETRY_AFTER_FAILURE_S, BotAuth
+from tranibor_m365_desk.config import FAKE_CLIENT_ID
+from tranibor_m365_desk.fake import CONVERSATION_ID, REPLY_ID, ROOT_ID, FakeBotIssuer, FakeMicrosoft, activity
 
 from .conftest import Mcp, Tracker
 
@@ -85,8 +85,8 @@ async def test_a_key_the_bot_framework_does_not_publish_is_not_verified(mcp: Mcp
 
 async def test_a_key_not_endorsed_for_teams_is_not_verified() -> None:
     fake = FakeMicrosoft(FakeBotIssuer(endorsements=("webchat",)))
-    from choregos_m365_desk.app import Runtime, build_server
-    from choregos_m365_desk.config import Settings
+    from tranibor_m365_desk.app import Runtime, build_server
+    from tranibor_m365_desk.config import Settings
 
     mcp = Mcp(build_server(Runtime(Settings.from_env({"M365_DESK_FAKE": "1"}), fake=fake)))
     assert await mcp.call("tracker_parse_event", **delivery(fake.issuer.mint(), activity())) == UNVERIFIED
@@ -240,8 +240,8 @@ async def test_concurrent_deliveries_with_forged_kids_read_the_keys_once() -> No
 async def test_the_platforms_door_events_answers_as_the_tool() -> None:
     from starlette.testclient import TestClient
 
-    from choregos_m365_desk.app import build_app
-    from choregos_m365_desk.config import Settings
+    from tranibor_m365_desk.app import build_app
+    from tranibor_m365_desk.config import Settings
 
     fake = FakeMicrosoft()
     settings = Settings.from_env({"M365_DESK_FAKE": "1", "TRANIBOR_SERVER_TOKEN": "t"})

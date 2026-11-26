@@ -69,3 +69,15 @@ def test_the_declared_fake_is_what_switches_the_server_to_its_fake_and_no_admini
     # Without it, the same environment is a cluster nobody configured: it refuses to start.
     with pytest.raises(ValueError, match="CERTIFICATES_CERT_MANAGER_"):
         build_app(Settings.from_env({"TRANIBOR_SERVER_TOKEN": "the-platform-s-token"}))
+
+
+def test_the_descriptor_s_schemas_are_the_profile_s() -> None:
+    """The server declares what the profile declares, so the core's comparison finds them equal (the schemas
+    are copied, with the definitions each one points to inlined)."""
+    profile = yaml.safe_load((ROOT.parent / "certificates" / "profiles" / "certificates.yaml").read_text())
+    declared = {op["name"]: op for op in descriptor()["operations"]}
+    for tool in profile["tools"]:
+        for key, source in (("input_schema", "input"), ("output_schema", "output")):
+            served = dict(declared[tool["name"]][key])
+            served.pop("$defs", None)
+            assert served == tool[source], f"{tool['name']}: {key}"

@@ -15,7 +15,7 @@ from tranibor_dns_godaddy.config import Settings
 
 TOKEN = "platform-token-for-tests"
 BEARER = {"Authorization": f"Bearer {TOKEN}"}
-BASE = "http://dns-godaddy.choregos-plugins.svc:8080"
+BASE = "http://dns-godaddy.tranibor-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
 
 

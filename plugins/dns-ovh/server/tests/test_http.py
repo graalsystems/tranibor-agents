@@ -15,7 +15,7 @@ from tranibor_dns_ovh.config import Settings
 
 TOKEN = "platform-token-for-tests"
 BEARER = {"Authorization": f"Bearer {TOKEN}"}
-BASE = "http://dns-ovh.choregos-plugins.svc:8080"
+BASE = "http://dns-ovh.tranibor-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
 
 

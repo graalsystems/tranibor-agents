@@ -1,0 +1,436 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `gitops` profile, version 1 (ADR 0224): what an MCP server must serve to be "a GitOps provider" for the
+# `gitops-steward` agent, whichever controller reconciles the applications. A provider's server
+# (`gitops-argocd`, and later a Flux one) declares `implements: [gitops/gitops@1]` and serves every tool below,
+# with at least this governance.
+#
+# Vocabulary. An *application* is a unit that a controller keeps equal to a desired state held in git, named
+# `name` (unique within the instance). `scope` is the provider's way of grouping applications that an
+# administrator hands out (an Argo CD project, a Flux namespace); the instance's allow-list is a list of scopes,
+# and an application of any other scope is refused, even to read. `sync_status` is whether the live state
+# matches the desired state: Synced, OutOfSync or Unknown. `health` is whether what runs works: Healthy,
+# Progressing, Degraded, Suspended, Missing or Unknown. They are independent. A *revision* is an opaque
+# string naming a point of the desired state (a commit SHA, a chart version). The *history* is the list of
+# revisions that were deployed, newest first, each with an opaque `id`.
+#
+# Third-party text. Messages, commit messages, event texts, hook output and resource values were written
+# outside this platform: they travel in fields an agent reads as data. A provider never returns the value of a
+# Secret, and says (`note`) where it hid something.
+#
+# Writes return what undoes them, because the server's `operations` declare compensations that read those
+# results: `rollback_application` answers the revision that was in force (`previous_revision`), from which a
+# sync undoes the rollback; `set_auto_sync` answers `previous_enabled`.
+#
+# Provider-specific tools beyond this list are allowed on a server; agents of this profile never see them.
+name: gitops
+version: 1
+description: Applications that a controller keeps equal to a desired state in git, whichever controller.
+tools:
+  - name: get_provider
+    access: read
+    description: >-
+      Which provider and which scopes this instance serves, and what it can do. An agent reads it on every
+      instance of the profile first, to pick the instance that serves the application it is asked about.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output: {$ref: "#/$defs/provider"}
+
+  - name: list_applications
+    access: read
+    description: >-
+      The applications of the instance's scopes (all of them, or one `scope`), optionally of one sync status
+      or health. `total` counts the matches; `truncated` says the cap left some out.
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        scope: {type: string}
+        sync_status: {enum: [Synced, OutOfSync, Unknown]}
+        health: {enum: [Healthy, Progressing, Degraded, Suspended, Missing, Unknown]}
+        limit: {type: integer, minimum: 1}
+    output:
+      type: object
+      required: [total, truncated, applications]
+      properties:
+        total: {type: integer}
+        truncated: {type: boolean}
+        scopes: {type: array, items: {type: string}}
+        applications: {type: array, items: {$ref: "#/$defs/application_summary"}}
+
+  - name: get_application
+    access: read
+    description: >-
+      One application: health, sync status, compared revision, scope, sync policy, the state of the last
+      operation (with the hooks and resources that failed), conditions, the resources not in sync and the
+      history. `revision_moved` says git moved since the last deployment (a pending commit rather than a
+      drift). `lingering_partial_sync` is set when the record of the last operation still holds a partial
+      sync's resource list (a provider without such a trap leaves it out).
+    input: {$ref: "#/$defs/by_name"}
+    # The profile's schema subset has no `allOf`: the summary's fields (see `application_summary`) are repeated.
+    output:
+      type: object
+      required: [name, scope, sync_status, health, auto_sync, compared_revision, last_deployed_revision, revision_moved, operation_in_progress, history]
+      properties:
+        name: {type: string}
+        scope: {type: string}
+        sync_status: {type: [string, "null"]}
+        health: {type: [string, "null"]}
+        revision: {type: [string, "null"]}
+        auto_sync: {type: boolean}
+        compared_revision: {type: [string, "null"], description: The revision the desired state was last read at.}
+        last_deployed_revision: {type: [string, "null"]}
+        revision_moved: {type: boolean, description: True when compared_revision is not the last deployed one.}
+        operation_in_progress: {type: boolean}
+        operation_state: {type: [object, "null"]}
+        lingering_partial_sync: {type: [object, "null"]}
+        conditions: {type: array, items: {type: object}}
+        resources_not_synced: {type: array, items: {$ref: "#/$defs/resource_ref"}}
+        history: {type: array, items: {$ref: "#/$defs/history_entry"}}
+
+  - name: list_resources
+    access: read
+    description: The resources an application owns (workloads, pods...) with their health; `unhealthy_only` keeps the ones in error.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        kind: {type: string}
+        unhealthy_only: {type: boolean}
+        limit: {type: integer, minimum: 1}
+    output:
+      type: object
+      required: [application, total, truncated, nodes]
+      properties:
+        application: {type: string}
+        total: {type: integer}
+        truncated: {type: boolean}
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [kind, name]
+            properties:
+              group: {type: string}
+              kind: {type: string}
+              namespace: {type: [string, "null"]}
+              name: {type: string}
+              health: {type: [string, "null"]}
+              health_message: {type: [string, "null"]}
+
+  - name: get_diff
+    access: read
+    description: >-
+      The diff between the desired state and the live one: for each resource that differs, whether it is
+      missing in the cluster, not in git, or the changed field paths with short live and desired values.
+      Values of a Secret and of credential-looking fields are never returned. `noise_hints` flags fields a
+      controller usually owns (candidates for an ignore rule).
+    input:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        limit: {type: integer, minimum: 1}
+    output:
+      type: object
+      required: [application, sync_status, managed_total, out_of_sync_total, resources, truncated]
+      properties:
+        application: {type: string}
+        sync_status: {type: [string, "null"]}
+        managed_total: {type: integer}
+        out_of_sync_total: {type: integer}
+        truncated: {type: boolean}
+        last_deployed_revision: {type: [string, "null"]}
+        compared_revision: {type: [string, "null"]}
+        resources:
+          type: array
+          items:
+            type: object
+            required: [kind, name, reason, changes]
+            properties:
+              kind: {type: string}
+              name: {type: string}
+              namespace: {type: [string, "null"]}
+              reason: {enum: [missing_in_cluster, not_in_git, differs]}
+              changes:
+                type: array
+                items:
+                  type: object
+                  required: [path, live, desired]
+                  properties:
+                    path: {type: string}
+                    live: {type: string}
+                    desired: {type: string}
+              noise_hints: {type: array, items: {type: string}}
+              all_changes_look_controller_owned: {type: boolean}
+
+  - name: list_events
+    access: read
+    description: The events of an application (or of one of its resources), newest first. Third-party text.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        resource_name: {type: string}
+        resource_namespace: {type: string}
+        limit: {type: integer, minimum: 1}
+    output:
+      type: object
+      required: [application, total, warnings, truncated, events]
+      properties:
+        application: {type: string}
+        total: {type: integer}
+        warnings: {type: integer}
+        truncated: {type: boolean}
+        events: {type: array, items: {type: object}}
+
+  - name: get_sync_windows
+    access: read
+    description: >-
+      The windows that restrict when a sync is allowed and whether one is allowed now. A provider with no such
+      restriction answers `can_sync` true and no windows.
+    input: {$ref: "#/$defs/by_name"}
+    output:
+      type: object
+      required: [application, can_sync, active_windows, assigned_windows]
+      properties:
+        application: {type: string}
+        can_sync: {type: boolean}
+        active_windows: {type: array, items: {type: object}}
+        assigned_windows: {type: array, items: {type: object}}
+
+  - name: get_history
+    access: read
+    description: >-
+      The deployment history (id, revision, date, who), newest first, and whether a rollback is possible now
+      (it is not while auto-sync is on).
+    input:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        limit: {type: integer, minimum: 1}
+    output:
+      type: object
+      required: [application, auto_sync, history, last_deployed_revision, compared_revision, revision_moved, rollback_possible]
+      properties:
+        application: {type: string}
+        auto_sync: {type: boolean}
+        history: {type: array, items: {$ref: "#/$defs/history_entry"}}
+        last_deployed_revision: {type: [string, "null"]}
+        compared_revision: {type: [string, "null"]}
+        revision_moved: {type: boolean}
+        rollback_possible: {type: boolean}
+        note: {type: string}
+
+  - name: get_revision_metadata
+    access: read
+    description: Author, date and message of a revision of an application. Commit text is third-party data.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name, revision]
+      properties:
+        name: {type: string}
+        revision: {type: string}
+    output:
+      type: object
+      required: [application, revision, message]
+      properties:
+        application: {type: string}
+        revision: {type: string}
+        author: {type: string}
+        date: {type: [string, "null"]}
+        message: {type: string}
+        tags: {type: array, items: {type: string}}
+
+  - name: plan_sync
+    access: read
+    description: >-
+      What a sync would create, update and prune, and what blocks it (an operation already running, a deny
+      window), computed from the diff, WITHOUT writing anything. It does not simulate hooks, ordering or
+      admission, and it does not simulate a rollback (which redeploys an older revision): say so when relevant.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        resources: {type: array, items: {$ref: "#/$defs/resource_selector"}}
+        prune: {type: boolean}
+    output:
+      type: object
+      required: [application, mode, prune, would_create, would_update, would_prune, blocked, warnings]
+      properties:
+        application: {type: string}
+        mode: {enum: [full, selective]}
+        prune: {type: boolean}
+        would_create: {type: array, items: {type: string}}
+        would_update: {type: array, items: {type: string}}
+        would_prune: {type: array, items: {type: string}}
+        left_alone_without_prune: {type: array, items: {type: string}}
+        blocked: {type: array, items: {type: string}, description: Empty when a sync can start now.}
+        warnings: {type: array, items: {type: string}}
+        not_simulated: {type: string}
+
+  - name: refresh_application
+    access: write
+    human_approval: false     # a floor: it asks the controller to re-read git and changes nothing that runs
+    description: >-
+      Asks the controller to re-read the desired state (`normal`), or to also drop its cache (`hard`). Nothing
+      changes in the cluster.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        mode: {enum: [normal, hard]}
+    output:
+      type: object
+      required: [application, refresh, requested_at]
+      properties:
+        application: {type: string}
+        refresh: {enum: [normal, hard]}
+        requested_at: {type: string}
+        state: {$ref: "#/$defs/application_summary"}
+
+  - name: sync_application
+    access: write
+    human_approval: true      # it changes what runs
+    platform_arguments: [action_key]
+    description: >-
+      Makes the live state equal to the desired state: the WHOLE application by default; `resources` (a partial
+      sync) only with a written `justification`. `prune` deletes resources git no longer has: false unless
+      asked. `revision` syncs to that revision instead of the desired state's own (it is how a rollback is
+      undone). Refused while an operation runs or a window denies it. Replaying the same governed action (same
+      `action_key`) starts nothing twice.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        resources: {type: array, items: {$ref: "#/$defs/resource_selector"}}
+        justification: {type: string}
+        prune: {type: boolean}
+        revision: {type: string}
+    output:
+      type: object
+      required: [application, sync_requested, already_applied]
+      properties:
+        application: {type: string}
+        sync_requested: {type: boolean, description: False when this governed action had already started the sync and nothing was sent again.}
+        already_applied: {type: boolean}
+        mode: {enum: [full, selective]}
+        prune: {type: boolean}
+        revision: {type: [string, "null"], description: The revision asked for; null for the desired state's own.}
+        previous_history_id: {type: [integer, "null"]}
+        warnings: {type: array, items: {type: string}}
+
+  - name: rollback_application
+    access: write
+    human_approval: true
+    description: >-
+      Redeploys the revision of a history entry. Refused while auto-sync is on (pause it with
+      `set_auto_sync`, which also needs a person) and while an operation runs or a window denies it. The
+      answer names the revision that was in force (`previous_revision`): syncing back to it undoes the rollback.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name, history_id]
+      properties:
+        name: {type: string}
+        history_id: {type: integer}
+        prune: {type: boolean}
+    output:
+      type: object
+      required: [application, rollback_requested, id, revision, previous_id, previous_revision, prune]
+      properties:
+        application: {type: string}
+        rollback_requested: {type: boolean}
+        id: {type: integer}
+        revision: {type: string}
+        previous_id: {type: integer}
+        previous_revision: {type: string}
+        prune: {type: boolean}
+        note: {type: string}
+
+  - name: set_auto_sync
+    access: write
+    human_approval: true      # resuming deploys whatever git holds; pausing freezes a release
+    description: >-
+      Pauses (`enabled` false) or resumes (`enabled` true) the controller's automatic sync of this application.
+      Resuming restores the automatic-sync settings (prune, self-heal) that pausing saved; with none saved it
+      enables the provider's plain default. A no-op answers `changed` false. The change is made on the
+      application object itself: an application that a parent application manages is reverted by it.
+    input:
+      type: object
+      additionalProperties: false
+      required: [name, enabled]
+      properties:
+        name: {type: string}
+        enabled: {type: boolean}
+    output:
+      type: object
+      required: [application, changed, enabled, previous_enabled]
+      properties:
+        application: {type: string}
+        changed: {type: boolean}
+        enabled: {type: boolean}
+        previous_enabled: {type: boolean}
+        warnings: {type: array, items: {type: string}}
+
+$defs:
+  provider:
+    type: object
+    required: [instance, provider, scopes]
+    properties:
+      instance: {type: string, description: The name of this instance of the server (its connector name).}
+      provider: {type: string, description: "The controller, e.g. argocd."}
+      scopes: {type: array, items: {type: string}, description: The scopes this instance may touch (its allow-list).}
+  by_name:
+    type: object
+    additionalProperties: false
+    required: [name]
+    properties:
+      name: {type: string}
+  application_summary:
+    type: object
+    required: [name, scope, sync_status, health, auto_sync]
+    properties:
+      name: {type: string}
+      scope: {type: string}
+      sync_status: {type: [string, "null"]}
+      health: {type: [string, "null"]}
+      revision: {type: [string, "null"]}
+      auto_sync: {type: boolean}
+  history_entry:
+    type: object
+    required: [id, revision]
+    properties:
+      id: {type: integer}
+      revision: {type: [string, "null"]}
+      deployed_at: {type: [string, "null"]}
+      initiated_by: {type: [string, "null"]}
+  resource_ref:
+    type: object
+    required: [kind, name]
+    properties:
+      group: {type: string}
+      kind: {type: string}
+      namespace: {type: [string, "null"]}
+      name: {type: string}
+  resource_selector:
+    type: object
+    additionalProperties: false
+    required: [kind, name]
+    properties:
+      group: {type: string, description: 'API group ("" for the core group); left out, read from the application.'}
+      kind: {type: string}
+      name: {type: string}
+      namespace: {type: string}

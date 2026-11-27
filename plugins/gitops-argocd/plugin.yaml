@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Argo CD server of the `gitops` profile (ADR 0224): it serves gitops/gitops@1 for Applications that Argo CD
+# reconciles (REST API v1, a dedicated local account), and the procedure an administrator follows on Argo CD.
+# The agent, skill, template and evals live in the `gitops` plugin, which this one requires.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: gitops-argocd
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Serve Argo CD Applications to the `gitops` plugin's agent: reads (status, diff, history, events), a sync plan
+    that writes nothing, and syncs, rollbacks and auto-sync pauses as approved, compensable actions. Only the
+    AppProjects an administrator lists are reachable, even to read.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # Profiles (`implements`) arrive with the core stories S86-01/S86-02; the first core release that carries
+  # them is not known yet, so this floor is a placeholder to be set to that release. The `gitops` plugin says the same.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: [{name: gitops, version: ">=0.1.0,<1.0.0"}]
+  connectors: {}
+contents:
+  procedures: ["procedures/*.md"]
+  servers: [servers/gitops-argocd.yaml]

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: gitops-change
+  version: 0.1.0
+  display: GitOps · drift under review
+  description: >-
+    An application that is OutOfSync or Degraded becomes a work item. The GitOps steward finds the instance that
+    serves it, reads it and writes a diagnosis with the fix it proposes; the platform owner reviews and decides
+    each proposed action. Nothing is synced, rolled back or paused before a person approves it.
+requires:
+  connectors: {}
+defaults:
+  workflows: [./workflows/gitops-change.yaml]
+  default_workflow: gitops-change
+  policy: preset:solo
+  # The agent `gitops-steward` and the skill `gitops-troubleshooting` come with the plugin itself. The template
+  # names no connector: the controller is whichever gitops server plugin the organisation installed, and the
+  # agent finds the instance that serves the application.
+inputs: []
+steps: []

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `gitops` plugin (ADR 0224): the GitOps profile (what any provider's server must serve), the provider-neutral
+# agent `gitops-steward`, its skill, the `gitops-change` template and the evals. It brings no server: a provider
+# plugin (`gitops-argocd`, a Flux one later...) brings one that `implements: [gitops/gitops@1]`.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: gitops
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Explain why an application that a GitOps controller reconciles is OutOfSync or Degraded, with evidence, and
+    propose the fix: a git change in text, or a sync, a rollback or an auto-sync pause that the platform owner
+    approves as a governed action. The agent names no controller: it works with whichever gitops server plugins
+    the organisation installed.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `contents.profiles` and `mcp_servers[].profile` arrive with the core stories S86-01/S86-02. The first core
+  # release that carries them is not known yet: this floor is a placeholder to set to that release.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  profiles: [profiles/gitops.yaml]
+  agents: [agents/gitops-steward.yaml]
+  skills: [skills/gitops-troubleshooting]
+  templates: [templates/gitops-change]
+  evals: [evals/gitops-steward.yaml]

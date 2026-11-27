@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: Apache-2.0
+# A GitOps change under review: alert or request → diagnosis (agent) → review (platform owner) →
+# verification (agent) → done.
+#
+# - The steward finds the instance that serves the application, reads it and writes a diagnosis. Any write it
+#   calls (sync, rollback, auto-sync pause or resume) is a governed action waiting in Approvals: nothing reaches
+#   the controller from the run itself. `sync_application`, `rollback_application` and `set_auto_sync` always
+#   need a person; a refresh, which changes nothing that runs, follows the project's policy.
+# - The platform owner reads the diagnosis and decides each proposed action in Approvals; an approved action is
+#   applied to the controller. A git change is text in the report, for the owner to make by hand. Rejecting
+#   closes the item without any action.
+# - There is no platform step that syncs: the workflow cannot name a connector, since the controller is
+#   whichever instance the organisation connected. The sync is the agent's proposed action, so it stays a
+#   governed action and each argument is visible to the approver.
+# - Verification: after the owner confirms, the steward refreshes and re-reads the application and says whether
+#   it is Synced and Healthy.
+# - A failed diagnosis goes back to the start untouched: the steward writes nothing on failure.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: gitops-change
+  version: 1
+  description: An application diagnosed by an agent, its fix decided by the platform owner through approvals, then verified.
+  inputs:
+    type: object
+    required: [application]
+    properties:
+      application: { type: string, title: Application, minLength: 1, maxLength: 253, pattern: "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$", description: The application to diagnose, e.g. shop-api }
+initial: alert
+actors:
+  steward: { type: agent, role: diagnosis, agent: gitops-steward, model: "profile:standard", max_turns: 30, max_minutes: 15 }
+  platform_owner: { type: human, group: platform-owners, sla_hours: 8 }
+states:
+  alert: { display: Alert or request, kind: wait }
+  awaiting_review: { display: Diagnosis to review, kind: wait }
+  decided: { display: Fix decided, kind: wait }
+  done: { display: Verified, terminal: true }
+  closed: { display: Closed without an action, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  abandoned: { display: Left to the platform owner, terminal: true }
+transitions:
+  - id: t-diagnose
+    from: alert
+    to: awaiting_review
+    by: steward
+    outputs: [gitops_report_markdown]
+    output_types: { gitops_report_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: alert, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-review
+    from: awaiting_review
+    to: decided
+    by: platform_owner
+    task:
+      title: Decide on the fix
+      instructions: >-
+        Read the diagnosis: which instance serves the application, the cause and its evidence. Decide each
+        proposed action in Approvals (sync, rollback, auto-sync pause or resume); an approved action is applied.
+        A git change in the report is yours to make by hand. Submit when the actions you wanted are decided.
+        Reject to close the item without any action.
+      form:
+        type: object
+        required: [decision_note]
+        properties:
+          decision_note: { type: string, title: Decision note, minLength: 1, maxLength: 2000 }
+      attest: I read the diagnosis and decided its actions
+    on_reject: closed
+
+  - id: t-verify
+    from: decided
+    to: done
+    by: steward
+    outputs: [gitops_report_markdown]
+    output_types: { gitops_report_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: decided, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: platform_owner
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

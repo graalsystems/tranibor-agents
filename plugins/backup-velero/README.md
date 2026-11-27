@@ -11,8 +11,8 @@ uses it is `backup-verifier`, which names no product.
 | Procedure | [`procedures/connector.mcp.backup-velero.md`](procedures/connector.mcp.backup-velero.md) | service account, RBAC, admission policy, optional read-only bucket key |
 
 ```sh
-choregos plugin validate plugins/backup-velero
-choregos plugin pack plugins/backup-velero -o backup-velero-0.1.0.tar.gz   # same bytes every time
+tranibor plugin validate plugins/backup-velero
+tranibor plugin pack plugins/backup-velero -o backup-velero-0.1.0.tar.gz   # same bytes every time
 cd plugins/backup-velero/server && uv sync --all-extras --dev && uv run pytest -q
 ```
 

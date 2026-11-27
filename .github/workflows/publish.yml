@@ -22,8 +22,8 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io/graalsystems/tranibor-agents
-  # The core whose `tranibor plugin` validates and packs; the same commit as ci.yml (the v0.29.0 tag of graalsystems/tranibor).
-  TRANIBOR_REF: 85e7ed7167d0dac40031dd8072ea92081e1b6daf
+  # The core whose `tranibor plugin` validates and packs; the same commit as ci.yml (the v0.30.0 tag of graalsystems/tranibor).
+  TRANIBOR_REF: 0fe08b87360dcccc3690df15647dd0d881652b6f
   # The cosign release the core's API verifies with (docker/api.Dockerfile).
   COSIGN_RELEASE: v3.1.3
   ORAS_VERSION: 1.3.1

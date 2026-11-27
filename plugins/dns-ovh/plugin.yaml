@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# The OVHcloud server of the `dns` profile (ADR 0224): it serves dns/dns@1 for zones hosted at OVHcloud
+# (API v1), and the procedure an administrator follows to create a consumer key restricted to those zones.
+# The agent, skill, template and evals live in the `dns` plugin, which this one requires.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: dns-ovh
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Serve DNS zones hosted at OVHcloud to the `dns` plugin's agent: reads, a plan that writes nothing,
+    idempotent creates, compensable updates and deletes, and OVHcloud's refresh as an approved publish.
+    Only the zones an administrator lists are reachable, even to read.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # Profiles (`implements`) arrive with the core stories S86-01/S86-02; the first core release that carries
+  # them is not known yet, so this floor is a placeholder to be set to that release. The `dns` plugin says the same.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: [{name: dns, version: ">=0.1.0,<1.0.0"}]
+  connectors: {}
+contents:
+  procedures: ["procedures/*.md"]
+  servers: [servers/dns-ovh.yaml]

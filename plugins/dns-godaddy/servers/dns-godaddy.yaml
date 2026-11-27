@@ -1,0 +1,618 @@
+# SPDX-License-Identifier: Apache-2.0
+# The GoDaddy server of the `dns` profile, as the platform runs and governs it (ADR 0094, ADR 0224).
+# Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: dns-godaddy
+# The profile this server serves (declared by the `dns` plugin, which this plugin requires). The tools below
+# are the profile's, with at least its governance; the profile's conformance suite runs in ../server/tests.
+implements: [dns/dns@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/dns-godaddy-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [environment, token, zones]
+  properties:
+    environment:
+      type: string
+      enum: [production, ote]
+      description: production for real domains; ote is GoDaddy's separate test environment, with its own token.
+      x-env: DNS_GODADDY_ENVIRONMENT
+      x-help: Use production unless you are testing against GoDaddy's OTE environment (a token of one does not work on the other).
+      x-link: https://developer.godaddy.com/getstarted
+    token:
+      type: string
+      minLength: 1
+      description: A personal access token (PAT) of GoDaddy's developer dashboard, with the scopes domains.domain:read and domains.dns:update.
+      x-env: DNS_GODADDY_TOKEN
+      x-help: Create it in the developer dashboard, tick only those two scopes; it is shown once and expires (7, 30, 60, 90 days or a year), so note the date.
+      x-link: https://developer.godaddy.com/keys
+    zones:
+      type: array
+      minItems: 1
+      items: {type: string}
+      description: >-
+        The zones this server may touch, e.g. example.com (joined with commas). Any other zone is refused,
+        even to read. A GoDaddy token is NOT limited to chosen domains, so this list is the restriction.
+      x-env: DNS_GODADDY_ZONES
+      x-help: Only these zones are ever reachable through this connector. List the ones the agent may manage.
+secret_fields: [token]
+
+# The two API hosts of the two environments. `environment` is an enumeration, not a URL, so the hosts are
+# fixed here rather than read from a field; the server only ever calls the one its `environment` names.
+# api.ote-godaddy.com follows the OpenAPI document's server variable and is not confirmed by a real call.
+egress:
+  hosts: [api.godaddy.com, api.ote-godaddy.com]
+
+# The governance floor of the profile, kept or raised. `access: read` is allowed by default; a write goes
+# through approval unless an administrator decides otherwise; `human_approval: true` is never lowered.
+# `compensation` is the operation that undoes the write, its arguments rendered from the write's own result;
+# the platform renders every argument to a string, so the server accepts numbers as text.
+operations:
+- name: get_provider
+  access: read
+  input_schema:
+    type: object
+    additionalProperties: false
+    properties: {}
+  output_schema:
+    $ref: '#/$defs/provider'
+    $defs:
+      provider:
+        type: object
+        required:
+        - instance
+        - provider
+        - zones
+        properties:
+          instance:
+            type: string
+            description: The name of this instance of the server (its connector name).
+          provider:
+            type: string
+            description: The provider, e.g. ovhcloud or godaddy.
+          zones:
+            type: array
+            items:
+              type: string
+            description: The zones this instance may touch (its allow-list).
+- name: list_zones
+  access: read
+  input_schema:
+    type: object
+    additionalProperties: false
+    properties: {}
+  output_schema:
+    type: object
+    required:
+    - zones
+    properties:
+      zones:
+        type: array
+        items:
+          type: string
+- name: get_zone
+  access: read
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    properties:
+      zone:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - zone
+    - pending_changes
+    properties:
+      zone:
+        type: string
+      name_servers:
+        type: array
+        items:
+          type: string
+      pending_changes:
+        type: boolean
+        description: True when written changes are not yet published (see `publish`).
+- name: list_records
+  access: read
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    properties:
+      zone:
+        type: string
+      type:
+        type: string
+      name:
+        type: string
+        description: Relative to the zone; "" is the apex.
+  output_schema:
+    type: object
+    required:
+    - zone
+    - count
+    - records
+    properties:
+      zone:
+        type: string
+      count:
+        type: integer
+      records:
+        type: array
+        items:
+          $ref: '#/$defs/record'
+    $defs:
+      record:
+        type: object
+        required:
+        - id
+        - zone
+        - name
+        - type
+        - ttl
+        - value
+        properties:
+          id:
+            type: string
+          zone:
+            type: string
+          name:
+            type: string
+          type:
+            type: string
+          ttl:
+            type: integer
+          value:
+            type: string
+- name: get_record
+  access: read
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    - id
+    properties:
+      zone:
+        type: string
+      id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - zone
+    - record
+    properties:
+      zone:
+        type: string
+      record:
+        $ref: '#/$defs/record'
+    $defs:
+      record:
+        type: object
+        required:
+        - id
+        - zone
+        - name
+        - type
+        - ttl
+        - value
+        properties:
+          id:
+            type: string
+          zone:
+            type: string
+          name:
+            type: string
+          type:
+            type: string
+          ttl:
+            type: integer
+          value:
+            type: string
+- name: export_zone
+  access: read
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    properties:
+      zone:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - zone
+    - text
+    - truncated
+    properties:
+      zone:
+        type: string
+      format:
+        type: string
+      truncated:
+        type: boolean
+      text:
+        type: string
+- name: plan_changes
+  access: read
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    properties:
+      zone:
+        type: string
+      desired:
+        type: array
+        items:
+          $ref: '#/$defs/desired'
+      clear:
+        type: array
+        items:
+          $ref: '#/$defs/key'
+    $defs:
+      desired:
+        type: object
+        additionalProperties: false
+        required:
+        - type
+        - name
+        - value
+        properties:
+          type:
+            type: string
+          name:
+            type: string
+          value:
+            type: string
+          ttl:
+            type: integer
+            minimum: 0
+      key:
+        type: object
+        additionalProperties: false
+        required:
+        - type
+        - name
+        properties:
+          type:
+            type: string
+          name:
+            type: string
+  output_schema:
+    type: object
+    required:
+    - zone
+    - valid
+    - errors
+    - warnings
+    - summary
+    - needs_publish
+    - proposed_calls
+    properties:
+      zone:
+        type: string
+      valid:
+        type: boolean
+        description: False when `errors` is not empty; then `proposed_calls` is empty.
+      errors:
+        type: array
+        items:
+          type: string
+      warnings:
+        type: array
+        items:
+          type: string
+      summary:
+        type: object
+        required:
+        - create
+        - update
+        - delete
+        - unchanged
+        properties:
+          create:
+            type: integer
+          update:
+            type: integer
+          delete:
+            type: integer
+          unchanged:
+            type: integer
+      creates:
+        type: array
+        items:
+          $ref: '#/$defs/desired'
+      updates:
+        type: array
+        items:
+          type: object
+      deletes:
+        type: array
+        items:
+          $ref: '#/$defs/record'
+      needs_publish:
+        type: boolean
+      propagation_seconds_after_change:
+        type: integer
+        description: How long a resolver may keep the OLD answer once the change is public.
+      proposed_calls:
+        type: array
+        items:
+          type: object
+          required:
+          - tool
+          - arguments
+          properties:
+            tool:
+              type: string
+            arguments:
+              type: object
+    $defs:
+      desired:
+        type: object
+        additionalProperties: false
+        required:
+        - type
+        - name
+        - value
+        properties:
+          type:
+            type: string
+          name:
+            type: string
+          value:
+            type: string
+          ttl:
+            type: integer
+            minimum: 0
+      record:
+        type: object
+        required:
+        - id
+        - zone
+        - name
+        - type
+        - ttl
+        - value
+        properties:
+          id:
+            type: string
+          zone:
+            type: string
+          name:
+            type: string
+          type:
+            type: string
+          ttl:
+            type: integer
+          value:
+            type: string
+- name: create_record
+  access: write
+  description: A record in a zone, applied at once. An identical record is returned, not duplicated (idempotent
+    through the platform's action_key).
+  platform_arguments:
+  - action_key
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    - name
+    - type
+    - value
+    properties:
+      zone:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      value:
+        type: string
+      ttl:
+        type: integer
+        minimum: 0
+        description: Seconds; 0 or absent is the provider's default. A provider refuses a value outside its own
+          range.
+  output_schema:
+    type: object
+    required:
+    - zone
+    - created
+    - id
+    - name
+    - type
+    - value
+    - ttl
+    - needs_publish
+    properties:
+      zone:
+        type: string
+      created:
+        type: boolean
+        description: False when an identical record already existed and nothing was written.
+      id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      value:
+        type: string
+      ttl:
+        type: integer
+      needs_publish:
+        type: boolean
+- name: update_record
+  access: write
+  description: Changes a record's value and/or TTL. Compensated by writing the previous values back.
+  compensation:
+    operation: update_record
+    arguments:
+      zone: '{{ result.zone }}'
+      id: '{{ result.id }}'
+      value: '{{ result.previous.value }}'
+      ttl: '{{ result.previous.ttl }}'
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    - id
+    properties:
+      zone:
+        type: string
+      id:
+        type: string
+      value:
+        type: string
+      ttl:
+        type: integer
+        minimum: 0
+  output_schema:
+    type: object
+    required:
+    - zone
+    - id
+    - changed
+    - name
+    - type
+    - value
+    - ttl
+    - previous
+    - needs_publish
+    properties:
+      zone:
+        type: string
+      id:
+        type: string
+        description: The record's id AFTER the update (it may differ from the one given).
+      changed:
+        type: boolean
+      name:
+        type: string
+      type:
+        type: string
+      value:
+        type: string
+      ttl:
+        type: integer
+      previous:
+        type: object
+        required:
+        - value
+        - ttl
+        properties:
+          value:
+            type: string
+          ttl:
+            type: integer
+      needs_publish:
+        type: boolean
+- name: delete_record
+  access: write
+  description: Deletes a record, applied at once. Always needs a person. Compensated by recreating the record from
+    the result.
+  human_approval: true
+  compensation:
+    operation: create_record
+    arguments:
+      zone: '{{ result.zone }}'
+      name: '{{ result.name }}'
+      type: '{{ result.type }}'
+      value: '{{ result.value }}'
+      ttl: '{{ result.ttl }}'
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    - id
+    properties:
+      zone:
+        type: string
+      id:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - zone
+    - deleted
+    - id
+    - name
+    - type
+    - value
+    - ttl
+    - needs_publish
+    properties:
+      zone:
+        type: string
+      deleted:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      value:
+        type: string
+      ttl:
+        type: integer
+      needs_publish:
+        type: boolean
+- name: publish
+  access: write
+  description: A no-op at GoDaddy, which applies every change at once, so it says so and writes nothing. Kept as
+    a write that needs a person, as the profile requires.
+  human_approval: true
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - zone
+    properties:
+      zone:
+        type: string
+  output_schema:
+    type: object
+    required:
+    - zone
+    - published
+    - pending
+    properties:
+      zone:
+        type: string
+      published:
+        type: boolean
+        description: True when this call made staged changes public.
+      pending:
+        type: boolean
+        description: True when changes are still waiting after the call.
+      note:
+        type: string
+
+# `input_schema` / `output_schema` of every operation are the `dns/dns@1` profile's own (ADR 0224, same
+# subset; each carries the `$defs` it points to). `plugin validate` proves them against the profile, and
+# tests/test_descriptor.py checks that the tools this server really serves match them.
+# The platform runs an eval instance of the image with exactly these variables (core #1372): the seeded
+# fake account, no network, nothing of the configuration.
+fake:
+  env: {DNS_GODADDY_FAKE: "1"}
+  scenes: [default]

@@ -1,0 +1,296 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `dns` profile, version 1 (ADR 0224): what an MCP server must serve to be "a DNS provider" for the
+# `dns-steward` agent, whoever hosts the zone. A provider's server (`dns-ovh`, `dns-godaddy`, ...) declares
+# `implements: [dns/dns@1]` and serves every tool below, with at least this governance.
+#
+# Vocabulary. A *record* is ONE value at one name: a set of records at the same name and type is several
+# records. `name` is relative to the zone, "" for the apex. `value` is the record's data as the provider
+# shows it, written as DNS text (an MX is "10 mail.example.com.", a host name is absolute with its final dot).
+# `ttl` is in seconds, 0 meaning the provider's default. `id` is opaque: only the server that issued it reads
+# it, and an id may change when a record is updated (a provider that has none derives one from the content),
+# so a write returns the record's id AFTER the write.
+#
+# Writes return what undoes them, because the server's `operations` declare compensations that read those
+# results: update_record answers `previous`; delete_record answers the record it deleted.
+#
+# Provider-specific tools beyond this list are allowed on a server; agents of this profile never see them.
+name: dns
+version: 1
+description: Authoritative DNS zones and their records, whatever the provider.
+tools:
+  - name: get_provider
+    access: read
+    description: >-
+      Which provider and which zones this instance serves. An agent reads it on every instance of the profile
+      first, to pick the instance that serves the zone it is asked about.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output: {$ref: "#/$defs/provider"}
+
+  - name: list_zones
+    access: read
+    description: The zones this instance may touch and that exist at the provider. No other zone is ever named.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output:
+      type: object
+      required: [zones]
+      properties:
+        zones: {type: array, items: {type: string}}
+
+  - name: get_zone
+    access: read
+    description: A zone's state, and whether changes are waiting to be published.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone]
+      properties:
+        zone: {type: string}
+    output:
+      type: object
+      required: [zone, pending_changes]
+      properties:
+        zone: {type: string}
+        name_servers: {type: array, items: {type: string}}
+        pending_changes: {type: boolean, description: True when written changes are not yet published (see `publish`).}
+
+  - name: list_records
+    access: read
+    description: A zone's records, optionally of one type and/or at one name.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone]
+      properties:
+        zone: {type: string}
+        type: {type: string}
+        name: {type: string, description: Relative to the zone; "" is the apex.}
+    output:
+      type: object
+      required: [zone, count, records]
+      properties:
+        zone: {type: string}
+        count: {type: integer}
+        records: {type: array, items: {$ref: "#/$defs/record"}}
+
+  - name: get_record
+    access: read
+    description: One record of a zone by its id.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone, id]
+      properties:
+        zone: {type: string}
+        id: {type: string}
+    output:
+      type: object
+      required: [zone, record]
+      properties:
+        zone: {type: string}
+        record: {$ref: "#/$defs/record"}
+
+  - name: export_zone
+    access: read
+    description: The zone as zone-file text (the provider's own export, or text built from its records). Third-party data.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone]
+      properties:
+        zone: {type: string}
+    output:
+      type: object
+      required: [zone, text, truncated]
+      properties:
+        zone: {type: string}
+        format: {type: string}
+        truncated: {type: boolean}
+        text: {type: string}
+
+  - name: plan_changes
+    access: read
+    description: >-
+      The diff between the records you want and the live zone, WITHOUT writing anything. At every (type, name)
+      that `desired` names the zone will hold exactly those values; `clear` empties (type, name) pairs; every
+      other record is left alone. Answers the exact calls to propose, in order.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone]
+      properties:
+        zone: {type: string}
+        desired: {type: array, items: {$ref: "#/$defs/desired"}}
+        clear: {type: array, items: {$ref: "#/$defs/key"}}
+    output:
+      type: object
+      required: [zone, valid, errors, warnings, summary, needs_publish, proposed_calls]
+      properties:
+        zone: {type: string}
+        valid: {type: boolean, description: False when `errors` is not empty; then `proposed_calls` is empty.}
+        errors: {type: array, items: {type: string}}
+        warnings: {type: array, items: {type: string}}
+        summary:
+          type: object
+          required: [create, update, delete, unchanged]
+          properties:
+            create: {type: integer}
+            update: {type: integer}
+            delete: {type: integer}
+            unchanged: {type: integer}
+        creates: {type: array, items: {$ref: "#/$defs/desired"}}
+        updates: {type: array, items: {type: object}}
+        deletes: {type: array, items: {$ref: "#/$defs/record"}}
+        needs_publish: {type: boolean}
+        propagation_seconds_after_change: {type: integer, description: How long a resolver may keep the OLD answer once the change is public.}
+        proposed_calls:
+          type: array
+          items:
+            type: object
+            required: [tool, arguments]
+            properties:
+              tool: {type: string}
+              arguments: {type: object}
+
+  - name: create_record
+    access: write
+    human_approval: false     # a floor: an implementation may raise it, never lower it
+    platform_arguments: [action_key]
+    description: >-
+      Creates a record. An identical record (same type, name and value) is returned instead of duplicated, so a
+      replay of the same governed action (same `action_key`) writes nothing twice.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone, name, type, value]
+      properties:
+        zone: {type: string}
+        name: {type: string}
+        type: {type: string}
+        value: {type: string}
+        ttl: {type: integer, minimum: 0, description: "Seconds; 0 or absent is the provider's default. A provider refuses a value outside its own range."}
+    output:
+      type: object
+      required: [zone, created, id, name, type, value, ttl, needs_publish]
+      properties:
+        zone: {type: string}
+        created: {type: boolean, description: False when an identical record already existed and nothing was written.}
+        id: {type: string}
+        name: {type: string}
+        type: {type: string}
+        value: {type: string}
+        ttl: {type: integer}
+        needs_publish: {type: boolean}
+
+  - name: update_record
+    access: write
+    human_approval: false
+    description: >-
+      Changes a record's value and/or TTL (never its name or type: to move a record, delete it and create it).
+      What is omitted stays. `previous` is what undoes the change.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone, id]
+      properties:
+        zone: {type: string}
+        id: {type: string}
+        value: {type: string}
+        ttl: {type: integer, minimum: 0}
+    output:
+      type: object
+      required: [zone, id, changed, name, type, value, ttl, previous, needs_publish]
+      properties:
+        zone: {type: string}
+        id: {type: string, description: The record's id AFTER the update (it may differ from the one given).}
+        changed: {type: boolean}
+        name: {type: string}
+        type: {type: string}
+        value: {type: string}
+        ttl: {type: integer}
+        previous:
+          type: object
+          required: [value, ttl]
+          properties:
+            value: {type: string}
+            ttl: {type: integer}
+        needs_publish: {type: boolean}
+
+  - name: delete_record
+    access: write
+    human_approval: true
+    description: Deletes a record. The answer holds the record, from which it is recreated.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone, id]
+      properties:
+        zone: {type: string}
+        id: {type: string}
+    output:
+      type: object
+      required: [zone, deleted, id, name, type, value, ttl, needs_publish]
+      properties:
+        zone: {type: string}
+        deleted: {type: boolean}
+        id: {type: string}
+        name: {type: string}
+        type: {type: string}
+        value: {type: string}
+        ttl: {type: integer}
+        needs_publish: {type: boolean}
+
+  - name: publish
+    access: write
+    human_approval: true
+    description: >-
+      Makes the zone's written changes public, for a provider that stages them. A provider that applies every
+      write at once answers a no-op: `published` false, `pending` false, with a note.
+    input:
+      type: object
+      additionalProperties: false
+      required: [zone]
+      properties:
+        zone: {type: string}
+    output:
+      type: object
+      required: [zone, published, pending]
+      properties:
+        zone: {type: string}
+        published: {type: boolean, description: True when this call made staged changes public.}
+        pending: {type: boolean, description: True when changes are still waiting after the call.}
+        note: {type: string}
+
+$defs:
+  provider:
+    type: object
+    required: [instance, provider, zones]
+    properties:
+      instance: {type: string, description: The name of this instance of the server (its connector name).}
+      provider: {type: string, description: "The provider, e.g. ovhcloud or godaddy."}
+      zones: {type: array, items: {type: string}, description: The zones this instance may touch (its allow-list).}
+  record:
+    type: object
+    required: [id, zone, name, type, ttl, value]
+    properties:
+      id: {type: string}
+      zone: {type: string}
+      name: {type: string}
+      type: {type: string}
+      ttl: {type: integer}
+      value: {type: string}
+  desired:
+    type: object
+    additionalProperties: false
+    required: [type, name, value]
+    properties:
+      type: {type: string}
+      name: {type: string}
+      value: {type: string}
+      ttl: {type: integer, minimum: 0}
+  key:
+    type: object
+    additionalProperties: false
+    required: [type, name]
+    properties:
+      type: {type: string}
+      name: {type: string}

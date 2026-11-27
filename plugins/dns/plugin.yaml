@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `dns` plugin (ADR 0224): the DNS profile (what any DNS provider's server must serve), the provider-neutral
+# agent `dns-steward`, its skill, the `dns-change` template and the evals. It brings no server: a provider
+# plugin (`dns-ovh`, `dns-godaddy`, ...) brings one that `implements: [dns/dns@1]`.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: dns
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Run DNS changes for zones at any provider under human approval: an agent reads a zone, plans the minimal
+    change with TTL advice and finds dangling records, the zone owner reviews, and the platform applies the
+    changes as governed actions. The agent names no provider: it works with whichever DNS server plugins the
+    organisation installed.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `contents.profiles` and `mcp_servers[].profile` arrive with the core stories S86-01/S86-02. The first core
+  # release that carries them is not known yet: this floor is a placeholder to set to that release.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  profiles: [profiles/dns.yaml]
+  agents: [agents/dns-steward.yaml]
+  skills: [skills/dns-change-hygiene]
+  templates: [templates/dns-change]
+  evals: [evals/dns-steward.yaml]

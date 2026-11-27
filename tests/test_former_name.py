@@ -70,6 +70,7 @@ RULES = (
     Rule(
         (
             "plugins/*/server/src/*/config.py",
+            "plugins/*/server/src/*/envs.py",
             "plugins/*/server/tests/*",
             "plugins/*/README.md",
             "tests/test_server_token.py",

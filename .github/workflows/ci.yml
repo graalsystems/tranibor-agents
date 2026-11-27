@@ -10,10 +10,10 @@ permissions:
 
 env:
   # The core whose validator, packer, eval matrix and publication library every job runs: the commit of
-  # the graalsystems/tranibor v0.29.0 tag (ADRs 0196-0202 and ADR 0181's `requires.extensions` since
-  # 0.28.1; 0.29.0 closed ADR 0181's windows: the evidence facts software-delivery 1.4.0 names).
-  # publish.yml pins the same commit.
-  TRANIBOR_REF: 85e7ed7167d0dac40031dd8072ea92081e1b6daf
+  # the graalsystems/tranibor v0.30.0 tag (ADR 0224: plugin profiles, `implements` naming a profile,
+  # `output_schema` on a server's operations, `mcp_servers[].profile`; before it, ADRs 0196-0202 and ADR
+  # 0181's windows of 0.29.0). publish.yml pins the same commit.
+  TRANIBOR_REF: 0fe08b87360dcccc3690df15647dd0d881652b6f
 
 jobs:
   servers:
@@ -65,7 +65,9 @@ jobs:
             found=1
             name=$(basename "$dir")
             echo "::group::$name"
-            uv run --frozen --package tranibor-cli tranibor plugin validate "$dir"
+            # --profiles-from: a server that implements a profile is proven against it (ADR 0224), whichever
+            # plugin of this repository declares it.
+            uv run --frozen --package tranibor-cli tranibor plugin validate "$dir" --profiles-from "$GITHUB_WORKSPACE/agents/plugins"
             uv run --frozen --package tranibor-cli tranibor plugin pack "$dir" -o "$out/$name-1.tar.gz"
             uv run --frozen --package tranibor-cli tranibor plugin pack "$dir" -o "$out/$name-2.tar.gz"
             cmp "$out/$name-1.tar.gz" "$out/$name-2.tar.gz" || { echo "::error::$name: pack is not reproducible"; exit 1; }

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Velero server of the `backup` profile (ADR 0224): it serves backup/backup@1 for a Kubernetes cluster that
+# runs Velero, and the procedure an administrator follows to create its restricted service account.
+# The agent, skill, template and evals live in the `backup` plugin, which this one requires.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: backup-velero
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Serve Velero backups to the `backup` plugin's agent: schedules, backups, locations, restores and
+    freshness read through the Kubernetes API, a backup run on demand, and an approved restore test into a
+    namespace the configuration allows.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # Profiles (`implements`) arrive with the core stories S86-01/S86-02; the first core release that carries
+  # them is not known yet, so this floor is a placeholder to be set to that release. The `backup` plugin says the same.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: [{name: backup, version: ">=0.1.0,<1.0.0"}]
+  connectors: {}
+contents:
+  procedures: ["procedures/*.md"]
+  servers: [servers/backup-velero.yaml]

@@ -1,0 +1,340 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `backup` profile, version 1 (ADR 0224): what an MCP server must serve to be "a backup system" for the
+# `backup-verifier` agent, whatever the product. A provider's server (`backup-velero`, later Veeam, restic, a
+# cloud provider's backup service...) declares `implements: [backup/backup@1]` and serves every tool below, with
+# at least this governance.
+#
+# Vocabulary.
+# - A *schedule* is a recurring backup job; a *backup* is one run of it (or a manual one); a *location* is
+#   where backups are stored; a *restore* is one attempt to bring a backup back.
+# - `id` is opaque: only the server that issued it reads it. Never parse it.
+# - `status` is NORMALISED: succeeded | partial | failed | running | pending. `partial` is a backup that
+#   finished with errors: restorable, but never counted as fresh. `provider_status` is the product's own word.
+#   A backup is restorable when its status is `succeeded` or `partial`.
+# - `age_hours` counts from a backup's START: the point in time the data represents, which is what an RPO measures.
+# - `freshness` is `fresh` | `stale` | `never` | `paused`, judged against what the schedule's period allows.
+# - A *restore test* goes into an isolated target (a namespace, a folder, a VM... whatever the product restores
+#   into) that the server's own configuration allows and names by a rule (`get_provider.restore_target_rule`).
+#   The agent cannot pick the target; the server derives it and refuses every other one, before any call to the
+#   backup system.
+#
+# Writes return what undoes them: `run_restore_test` answers the `target` it created, which `cleanup_restore_test`
+# takes. A backup cannot be un-made, so `trigger_backup` has no compensation: retention removes it.
+#
+# `action_key` is a platform argument: the platform fills it, so the input schemas below do not list it.
+#
+# Provider-specific tools beyond this list are allowed on a server; agents of this profile never see them.
+name: backup
+version: 1
+description: Backup schedules, backups with their status, age and errors, storage locations, and restore tests, whatever the backup system.
+tools:
+  - name: get_provider
+    access: read
+    description: >-
+      Which backup system this instance serves and where it may restore. An agent reads it on every instance of
+      the profile first, to pick the instance that serves the system it is asked about.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output: {$ref: "#/$defs/provider"}
+
+  - name: list_schedules
+    access: read
+    description: Every schedule, with its newest backup. A schedule that never ran says so (`last_backup` null).
+    input: {type: object, additionalProperties: false, properties: {}}
+    output:
+      type: object
+      required: [schedules]
+      properties:
+        schedules: {type: array, items: {$ref: "#/$defs/schedule"}}
+
+  - name: list_backups
+    access: read
+    description: Backups, newest first, optionally of one schedule and/or one normalised status.
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        schedule: {type: string, description: A schedule id.}
+        status: {$ref: "#/$defs/status"}
+        limit: {type: integer, minimum: 1, maximum: 100, description: Default 20.}
+    output:
+      type: object
+      required: [total, backups, truncated]
+      properties:
+        total: {type: integer}
+        truncated: {type: boolean}
+        backups: {type: array, items: {$ref: "#/$defs/backup"}}
+
+  - name: get_backup
+    access: read
+    description: One backup in detail, with its errors, scope and (where the system says) size.
+    input:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: {type: string}
+    output:
+      type: object
+      required: [backup]
+      properties:
+        backup: {$ref: "#/$defs/backup"}
+
+  - name: list_locations
+    access: read
+    description: Where backups are stored, and whether each location is available right now.
+    input: {type: object, additionalProperties: false, properties: {}}
+    output:
+      type: object
+      required: [locations]
+      properties:
+        locations: {type: array, items: {$ref: "#/$defs/location"}}
+
+  - name: list_restores
+    access: read
+    description: Restores, newest first, optionally of one backup.
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        backup_id: {type: string}
+        limit: {type: integer, minimum: 1, maximum: 100, description: Default 20.}
+    output:
+      type: object
+      required: [total, restores, truncated]
+      properties:
+        total: {type: integer}
+        truncated: {type: boolean}
+        restores: {type: array, items: {$ref: "#/$defs/restore"}}
+
+  - name: get_restore
+    access: read
+    description: >-
+      One restore, and how what it brought back compares with its backup. `comparison.comparable` is true only
+      when the restore covers exactly what the backup covers: only then does `ratio` mean anything.
+    input:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: {type: string}
+    output:
+      type: object
+      required: [restore, comparison]
+      properties:
+        restore: {$ref: "#/$defs/restore"}
+        comparison:
+          type: object
+          required: [comparable]
+          properties:
+            comparable: {type: boolean}
+            reason: {type: string}
+            backup_items: {type: [integer, "null"]}
+            restored_items: {type: [integer, "null"]}
+            ratio: {type: [number, "null"]}
+
+  - name: backup_freshness
+    access: read
+    description: >-
+      Per schedule: the age of its newest SUCCEEDED backup against what its period allows (or `max_age_hours`),
+      with the verdict. A partial or failed backup is never counted as a fresh one.
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        max_age_hours: {type: number, minimum: 0.01, description: "Overrides the allowance derived from each schedule's period; in hours, at least 0.01 (the profile cannot say strictly positive)."}
+    output:
+      type: object
+      required: [schedules]
+      properties:
+        schedules:
+          type: array
+          items:
+            type: object
+            required: [schedule, freshness, age_hours, allowed_age_hours]
+            properties:
+              schedule: {type: string}
+              freshness: {enum: [fresh, stale, never, paused]}
+              last_good_backup: {type: [string, "null"]}
+              last_good_start: {type: [string, "null"]}
+              age_hours: {type: [number, "null"]}
+              allowed_age_hours: {type: number}
+              basis: {type: string}
+              newest_backup: {type: [string, "null"]}
+              newest_backup_status: {type: [string, "null"]}
+              newest_backup_errors: {type: [integer, "null"]}
+              location: {type: [string, "null"]}
+              location_available: {type: [boolean, "null"]}
+
+  - name: storage_inventory
+    access: read
+    description: >-
+      What the storage behind the backups holds (object count, total size, newest object), when the server can
+      look at it. `configured: false` when it cannot, which is not a finding.
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        prefix: {type: string, description: A sub-path to look at.}
+    output:
+      type: object
+      required: [configured]
+      properties:
+        configured: {type: boolean}
+        object_count: {type: integer}
+        total_bytes: {type: integer}
+        newest_object: {type: [string, "null"]}
+        newest_object_age_hours: {type: [number, "null"]}
+        truncated: {type: boolean}
+
+  - name: trigger_backup
+    access: write
+    platform_arguments: [action_key]
+    description: >-
+      Runs a schedule's backup now. Idempotent through the platform's `action_key`: a replay answers the same
+      backup with `already_existed: true`. It writes one more backup under the schedule's own settings and
+      nothing else; it has no undo (retention removes it).
+    input:
+      type: object
+      additionalProperties: false
+      required: [schedule]
+      properties:
+        schedule: {type: string, description: A schedule id.}
+    output:
+      type: object
+      required: [schedule, backup_id, status, already_existed]
+      properties:
+        schedule: {type: string}
+        backup_id: {type: string}
+        status: {$ref: "#/$defs/status"}
+        already_existed: {type: boolean}
+
+  - name: run_restore_test
+    access: write
+    human_approval: true
+    platform_arguments: [action_key]
+    description: >-
+      Restores `source` of a backup into an isolated target that the server derives from its own rule
+      (`get_provider.restore_target_rule`); the production source is never overwritten. A restore writes data:
+      a person approves it. Only a restorable backup is restored. Idempotent through `action_key`. Undone by
+      `cleanup_restore_test` on the returned `target`.
+    input:
+      type: object
+      additionalProperties: false
+      required: [backup_id, source]
+      properties:
+        backup_id: {type: string}
+        source: {type: string, description: "The part of the backup to restore (a namespace, a machine, a folder)."}
+        name: {type: string, description: A label for the target; the server adds the rule's prefix and a date.}
+        include_data: {type: boolean, description: Restore the data volumes too. Default false.}
+        exclude: {type: array, items: {type: string}, description: Kinds of object to leave out of the restore (at most 20).}
+    output:
+      type: object
+      required: [restore_id, backup_id, source, target, status, already_existed]
+      properties:
+        restore_id: {type: string}
+        backup_id: {type: string}
+        source: {type: string}
+        target: {type: string, description: Where it was restored; what `cleanup_restore_test` takes.}
+        include_data: {type: [boolean, "null"]}
+        status: {$ref: "#/$defs/status"}
+        already_existed: {type: boolean}
+
+  - name: cleanup_restore_test
+    access: write
+    human_approval: false
+    description: >-
+      Deletes a restore-test target. Refused outside the server's allowed rule, and for a target this server did
+      not create: nothing it did not restore is ever deleted. Deleting throw-away data needs no approval.
+    input:
+      type: object
+      additionalProperties: false
+      required: [target]
+      properties:
+        target: {type: string}
+    output:
+      type: object
+      required: [target, deleted]
+      properties:
+        target: {type: string}
+        deleted: {type: boolean}
+        already_gone: {type: boolean}
+        terminating: {type: boolean}
+
+$defs:
+  status: {enum: [succeeded, partial, failed, running, pending]}
+  provider:
+    type: object
+    required: [instance, provider, restore_target_rule, storage_inventory_configured]
+    properties:
+      instance: {type: string, description: The name of this instance of the server (its connector name).}
+      provider: {type: string, description: "The backup system, e.g. velero."}
+      restore_target_rule: {type: string, description: "Where a restore test may go, in words, e.g. namespaces starting with restore-test-."}
+      storage_inventory_configured: {type: boolean}
+  backup:
+    type: object
+    required: &backup_required [id, status, provider_status]
+    properties: &backup_properties
+      id: {type: string}
+      schedule: {type: [string, "null"]}
+      status: {$ref: "#/$defs/status"}
+      provider_status: {type: string}
+      errors: {type: integer}
+      warnings: {type: integer}
+      start: {type: [string, "null"]}
+      completion: {type: [string, "null"]}
+      age_hours: {type: [number, "null"]}
+      expiration: {type: [string, "null"]}
+      location: {type: [string, "null"]}
+      scope: {type: array, items: {type: string}, description: "What the backup covers (namespaces, machines); empty means everything."}
+      size_bytes: {type: [integer, "null"], description: Null when the system does not report it.}
+      items_backed_up: {type: [integer, "null"]}
+      items_total: {type: [integer, "null"]}
+  # The profile subset has no oneOf: a backup or null is the same shape with the type widened (anchors, same text).
+  backup_or_null:
+    type: [object, "null"]
+    required: *backup_required
+    properties: *backup_properties
+  schedule:
+    type: object
+    required: [id, cron, paused]
+    properties:
+      id: {type: string}
+      cron: {type: string}
+      paused: {type: boolean}
+      period_hours: {type: [number, "null"]}
+      next_run: {type: [string, "null"]}
+      location: {type: [string, "null"]}
+      scope: {type: array, items: {type: string}}
+      retention: {type: [string, "null"]}
+      validation_errors: {type: array, items: {type: string}}
+      backups_known: {type: integer}
+      last_backup: {$ref: "#/$defs/backup_or_null"}
+  location:
+    type: object
+    required: [id, available]
+    properties:
+      id: {type: string}
+      provider: {type: [string, "null"]}
+      available: {type: boolean}
+      provider_status: {type: [string, "null"]}
+      message: {type: [string, "null"], description: Third-party text.}
+      default: {type: boolean}
+      last_checked: {type: [string, "null"]}
+      last_checked_age_hours: {type: [number, "null"]}
+  restore:
+    type: object
+    required: [id, backup_id, status, provider_status]
+    properties:
+      id: {type: string}
+      backup_id: {type: [string, "null"]}
+      status: {$ref: "#/$defs/status"}
+      provider_status: {type: string}
+      errors: {type: integer}
+      warnings: {type: integer}
+      start: {type: [string, "null"]}
+      completion: {type: [string, "null"]}
+      age_hours: {type: [number, "null"]}
+      target: {type: [string, "null"]}
+      items_restored: {type: [integer, "null"]}
+      items_total: {type: [integer, "null"]}
+      made_by_this_server: {type: boolean}

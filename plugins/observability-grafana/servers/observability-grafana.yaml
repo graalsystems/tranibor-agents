@@ -1,0 +1,152 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Grafana server of the `observability` profile, as the platform runs and governs it (ADR 0094, ADR 0224).
+# Source: ../server. A tool not listed in `operations` is refused by the platform. One connector, one
+# service-account token: the datasources (Prometheus, Mimir, Loki) are reached through Grafana's own proxy.
+name: observability-grafana
+# The profile this server serves (declared by the `observability` plugin, which this plugin requires). The
+# tools below are the profile's, with at least its governance; the conformance suite runs in ../server/tests.
+implements: [observability/observability@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/observability-grafana-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again. The three caps
+# are enforced by the server whatever an agent asks; the ceilings in the schema cannot be exceeded.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [base_url, token]
+  properties:
+    base_url:
+      type: string
+      format: uri
+      pattern: "^https://"
+      description: The Grafana URL, e.g. https://grafana.example.com
+      x-env: GRAFANA_BASE_URL
+      x-help: Reachable from the platform. A private Grafana needs the platform's private egress (see the README), which does not exist yet.
+    token:
+      type: string
+      minLength: 8
+      description: A service-account token. The Viewer role reads everything; add the Editor role only if silences and annotations are wanted.
+      x-env: GRAFANA_TOKEN
+      x-help: Administration, Users and access, Service accounts, Add token. Sealed once saved.
+      x-link: https://grafana.com/docs/grafana/latest/administration/service-accounts/
+    org_id:
+      type: integer
+      minimum: 1
+      description: The organization id sent as X-Grafana-Org-Id. Leave empty for the service account's own organization.
+      x-env: GRAFANA_ORG_ID
+    datasources:
+      type: array
+      items: {type: string}
+      description: Allow-list of datasource uids the metric and log queries may reach (joined with commas). Empty means every Prometheus-type and Loki datasource the token can see.
+      x-env: GRAFANA_DATASOURCES
+    max_range_hours:
+      type: integer
+      minimum: 1
+      maximum: 24
+      default: 6
+      description: The widest window one metric or log query may cover.
+      x-env: GRAFANA_MAX_RANGE_HOURS
+    max_lines:
+      type: integer
+      minimum: 1
+      maximum: 1000
+      default: 200
+      description: The most log lines one query returns.
+      x-env: GRAFANA_MAX_LINES
+    max_silence_minutes:
+      type: integer
+      minimum: 1
+      maximum: 1440
+      default: 120
+      description: The longest silence the plugin may create.
+      x-env: GRAFANA_MAX_SILENCE_MINUTES
+secret_fields: [token]
+
+# The only host the server may reach: the Grafana instance.
+egress:
+  from_fields: [base_url]
+
+# The governance floor. `access: read` is allowed by default; a write goes through approval unless an
+# administrator decides otherwise; `human_approval: true` is never lowered. `compensation` is the
+# operation that undoes the write, its arguments rendered from the write's own result.
+# `platform_arguments: [action_key]` is an idempotency key the platform fills, never the agent.
+operations:
+  - name: get_provider
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {}}
+    output_schema: {"type": "object", "required": ["instance", "provider", "sources"], "properties": {"instance": {"type": "string", "description": "The name of this instance of the server (its connector name)."}, "provider": {"type": "string", "description": "The provider, e.g. grafana."}, "sources": {"type": "array", "items": {"type": "string"}, "description": "The ids of the sources this instance may query (its allow-list)."}}}
+  - name: list_firing_alerts
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {"labels": {"type": "object", "additionalProperties": {"type": "string"}}, "since": {"type": "string", "description": "ISO 8601."}, "include_silenced": {"type": "boolean"}, "limit": {"type": "integer", "description": "The server caps it."}}}
+    output_schema: {"type": "object", "required": ["total", "truncated", "alerts"], "properties": {"as_of": {"type": "string"}, "untrusted": {"type": "boolean"}, "total": {"type": "integer"}, "truncated": {"type": "boolean"}, "alerts": {"type": "array", "items": {"type": "object", "required": ["id", "labels", "annotations", "state", "starts_at"], "properties": {"id": {"type": "string"}, "labels": {"type": "object", "additionalProperties": {"type": "string"}}, "annotations": {"type": "object", "additionalProperties": {"type": "string"}}, "state": {"type": "string"}, "starts_at": {"type": ["string", "null"]}, "silenced_by": {"type": "array", "items": {"type": "string"}}, "rule_id": {"type": ["string", "null"], "description": "The rule that fired it, for get_alert_rule; null when the provider does not say."}, "url": {"type": ["string", "null"]}}}}}}
+  - name: get_alert_rule
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["rule_id"], "properties": {"rule_id": {"type": "string"}}}
+    output_schema: {"type": "object", "required": ["id", "title", "queries", "labels", "annotations"], "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "for_duration": {"type": ["string", "null"]}, "labels": {"type": "object", "additionalProperties": {"type": "string"}}, "annotations": {"type": "object", "additionalProperties": {"type": "string"}}, "is_paused": {"type": "boolean"}, "queries": {"type": "array", "items": {"type": "object", "required": ["source", "expr"], "properties": {"ref_id": {"type": ["string", "null"]}, "source": {"type": ["string", "null"], "description": "A source id, or null when the provider does not say."}, "expr": {"type": ["string", "null"]}}}}, "untrusted": {"type": "boolean"}}}
+  - name: list_silences
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {"state": {"type": "string", "enum": ["active", "pending", "expired"]}, "limit": {"type": "integer"}}}
+    output_schema: {"type": "object", "required": ["total", "truncated", "silences"], "properties": {"total": {"type": "integer"}, "truncated": {"type": "boolean"}, "silences": {"type": "array", "items": {"type": "object", "required": ["id", "state", "matchers", "starts_at", "ends_at", "created_by", "comment"], "properties": {"id": {"type": "string"}, "state": {"type": "string"}, "matchers": {"type": "array", "items": {"type": "object", "required": ["name", "value"], "properties": {"name": {"type": "string"}, "value": {"type": "string"}, "is_regex": {"type": "boolean"}, "is_equal": {"type": "boolean"}}}}, "starts_at": {"type": ["string", "null"]}, "ends_at": {"type": ["string", "null"]}, "created_by": {"type": ["string", "null"]}, "comment": {"type": "string"}}}}}}
+  - name: list_sources
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {}}
+    output_schema: {"type": "object", "required": ["sources"], "properties": {"sources": {"type": "array", "items": {"type": "object", "required": ["id", "name", "kind"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "kind": {"type": "string", "enum": ["metrics", "logs"]}}}}}}
+  - name: query_metrics
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["source", "expr", "start", "end"], "properties": {"source": {"type": "string", "description": "A source `id` of kind metrics."}, "expr": {"type": "string"}, "start": {"type": "string"}, "end": {"type": "string"}, "step_seconds": {"type": "integer"}, "instant": {"type": "boolean"}}}
+    output_schema: {"type": "object", "required": ["source", "expr", "start", "end", "series", "truncated"], "properties": {"source": {"type": "string"}, "expr": {"type": "string"}, "start": {"type": "string"}, "end": {"type": "string"}, "step_seconds": {"type": "integer"}, "instant": {"type": "boolean"}, "untrusted": {"type": "boolean"}, "truncated": {"type": "boolean"}, "series": {"type": "array", "items": {"type": "object", "required": ["name", "labels", "points", "count"], "properties": {"name": {"type": "string"}, "labels": {"type": "object", "additionalProperties": {"type": "string"}}, "points": {"type": "array", "items": {"type": "array"}}, "count": {"type": "integer"}, "min": {"type": ["number", "null"]}, "max": {"type": ["number", "null"]}, "last": {"type": ["number", "null"]}}}}}}
+  - name: query_logs
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["source", "expr", "start", "end"], "properties": {"source": {"type": "string", "description": "A source `id` of kind logs."}, "expr": {"type": "string"}, "start": {"type": "string"}, "end": {"type": "string"}, "limit": {"type": "integer"}}}
+    output_schema: {"type": "object", "required": ["source", "expr", "start", "end", "lines", "truncated"], "properties": {"source": {"type": "string"}, "expr": {"type": "string"}, "start": {"type": "string"}, "end": {"type": "string"}, "limit": {"type": "integer"}, "untrusted": {"type": "boolean"}, "truncated": {"type": "boolean"}, "lines": {"type": "array", "items": {"type": "object", "required": ["line"], "properties": {"time": {"type": ["string", "null"]}, "line": {"type": "string"}, "labels": {"type": "object", "additionalProperties": {"type": "string"}}}}}}}
+  - name: list_dashboards
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}}
+    output_schema: {"type": "object", "required": ["dashboards", "truncated"], "properties": {"truncated": {"type": "boolean"}, "dashboards": {"type": "array", "items": {"type": "object", "required": ["id", "title"], "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "folder": {"type": ["string", "null"]}, "tags": {"type": "array", "items": {"type": "string"}}, "url": {"type": ["string", "null"]}}}}}}
+  - name: get_dashboard
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["id"], "properties": {"id": {"type": "string"}}}
+    output_schema: {"type": "object", "required": ["id", "title", "panels", "truncated"], "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "truncated": {"type": "boolean"}, "panels": {"type": "array", "items": {"type": "object", "required": ["title", "type", "queries"], "properties": {"id": {"type": ["integer", "string", "null"]}, "title": {"type": "string"}, "type": {"type": "string"}, "description": {"type": "string"}, "queries": {"type": "array", "items": {"type": "object", "required": ["source", "expr"], "properties": {"ref_id": {"type": ["string", "null"]}, "source": {"type": ["string", "null"], "description": "A source id, or null when the provider does not say."}, "expr": {"type": ["string", "null"]}}}}}}}}}
+  - name: list_annotations
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["start", "end"], "properties": {"start": {"type": "string"}, "end": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "limit": {"type": "integer"}}}
+    output_schema: {"type": "object", "required": ["total", "annotations"], "properties": {"total": {"type": "integer"}, "annotations": {"type": "array", "items": {"type": "object", "required": ["id", "text", "tags"], "properties": {"id": {"type": ["string", "null"]}, "time": {"type": ["string", "null"]}, "time_end": {"type": ["string", "null"]}, "text": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "user": {"type": ["string", "null"]}}}}}}
+  - name: create_silence
+    access: write
+    human_approval: true
+    description: >-
+      Silences a firing alert for a bounded time, by exact label matchers copied from that alert.
+      Idempotent through the platform's action_key. Undone by expiring the silence.
+    platform_arguments: [action_key]
+    compensation:
+      operation: expire_silence
+      arguments:
+        silence_id: "{{ result.silence_id }}"
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["matchers", "duration_minutes", "comment"], "properties": {"matchers": {"type": "object", "additionalProperties": {"type": "string"}}, "duration_minutes": {"type": "integer", "description": "The server caps it."}, "comment": {"type": "string", "description": "Why, for the person who finds the silence later."}}}
+    output_schema: {"type": "object", "required": ["silence_id", "created", "starts_at", "ends_at", "matched_alerts"], "properties": {"silence_id": {"type": "string"}, "created": {"type": "boolean", "description": "False when the same `action_key` had already created it."}, "starts_at": {"type": "string"}, "ends_at": {"type": "string"}, "matchers": {"type": "object", "additionalProperties": {"type": "string"}}, "matched_alerts": {"type": "integer"}, "comment": {"type": "string"}}}
+  - name: expire_silence
+    access: write
+    description: Expires a silence this plugin created, never a person's. Already expired, nothing changes.
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["silence_id"], "properties": {"silence_id": {"type": "string"}}}
+    output_schema: {"type": "object", "required": ["silence_id", "expired", "state"], "properties": {"silence_id": {"type": "string"}, "expired": {"type": "boolean", "description": "False when it was already expired."}, "state": {"type": "string"}}}
+  - name: add_annotation
+    access: write
+    description: An organization annotation (an incident marker), idempotent through the platform's action_key.
+    platform_arguments: [action_key]
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["text"], "properties": {"text": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "time": {"type": "string", "description": "ISO 8601; now by default."}, "time_end": {"type": "string", "description": "For a region."}}}
+    output_schema: {"type": "object", "required": ["id", "created", "tags"], "properties": {"id": {"type": "string"}, "created": {"type": "boolean"}, "time": {"type": ["string", "null"]}, "tags": {"type": "array", "items": {"type": "string"}}}}
+
+
+# How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
+# switches it to its seeded in-memory Grafana (server/src/tranibor_observability_grafana/fake.py), which no
+# configuration field reaches, and the one scene that stack serves. The platform adds its own token
+# (TRANIBOR_SERVER_TOKEN) and nothing of the configuration.
+fake:
+  env: {OBSERVABILITY_GRAFANA_FAKE: "1"}
+  scenes: [default]

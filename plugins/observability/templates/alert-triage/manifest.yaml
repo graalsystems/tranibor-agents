@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: alert-triage
+  version: 0.1.0
+  display: On-call · alert triage under approval
+  description: >-
+    A firing alert, or a request to triage what is firing, becomes a work item. The alert-triage agent finds
+    the instance that fires it, groups the alerts that share a cause, reads the rule, the metric, a slice of
+    logs and the deploy markers, and decides real incident, noise or known flapping; the person on call
+    reviews it and settles the outcome. A silence, when one is warranted, is a governed action that a person
+    approves. Nothing is written to the provider before a person approves it.
+requires:
+  # Work items are opened by an HTTP trigger (ADR 0113) that the provider's webhook calls, or by hand: the
+  # project's own tracker, no external one. A template cannot ship the trigger; a provider plugin's procedure
+  # gives its definition.
+  connectors:
+    tracker: internal
+defaults:
+  workflows: [./workflows/alert-triage.yaml]
+  default_workflow: alert-triage
+  policy: preset:solo
+  # The agent `alert-triage` and the skill of the same name come with the plugin itself. The template names no
+  # connector: the provider is whichever observability server plugin the organisation installed, and the
+  # agent finds the instance that fires the alert.
+inputs: []
+steps: []

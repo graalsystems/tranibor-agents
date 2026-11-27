@@ -12,7 +12,7 @@ console (official Integration API, optional Site Manager API), under human appro
 | Procedure | [`procedures/connector.mcp.lan-unifi.md`](procedures/connector.mcp.lan-unifi.md) | least-rights API key, pinned CA, what the official API cannot do |
 
 ```sh
-choregos plugin validate plugins/lan-unifi
+tranibor plugin validate plugins/lan-unifi
 cd plugins/lan-unifi/server && uv sync --all-extras --dev && uv run pytest -q
 ```
 

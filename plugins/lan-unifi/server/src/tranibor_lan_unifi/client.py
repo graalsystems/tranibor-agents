@@ -6,11 +6,12 @@ key is ever logged or put in an error.
   header `X-API-KEY`, pages `{offset, limit, count, totalCount, data}` (`limit` at most 200).
   Reference: the OpenAPI document of Network 11.0.97 published at https://developer.ui.com/network/.
   Through the official cloud connector (`console_id` given) the same paths are served by
-  `https://api.ui.com/v1/connector/consoles/<id>/network/integration/...` (or `.../proxy/network/integration/...`:
-  the two official documents disagree, so the first call probes both, read-only: see `_resolve_prefix`), header `X-API-Key` (a Site Manager
-  key); the connector proxies to the console's `http://127.0.0.1/proxy/<path>`. Its limits (Site Manager API
-  v1.0.0): 100 requests per minute per console, 25 s per request, 10 MB per response, console firmware
-  >= 5.0.3. They are kept under client-side: see `Throttle`, `CLOUD_TIMEOUT_S`, `CLOUD_BODY_MAX`.
+  `https://api.ui.com/v1/connector/consoles/<id>/network/integration/...` (or
+  `.../proxy/network/integration/...`: the two official documents disagree, so the first call probes both,
+  read-only: see `_resolve_prefix`), header `X-API-Key` (a Site Manager key); the connector proxies to the
+  console's `http://127.0.0.1/proxy/<path>`. Its limits (Site Manager API v1.0.0): 100 requests per minute
+  per console, 25 s per request, 10 MB per response, console firmware >= 5.0.3. They are kept under
+  client-side: see `Throttle`, `CLOUD_TIMEOUT_S`, `CLOUD_BODY_MAX`.
 - `SiteManager`: the cloud API at `https://api.ui.com/v1/...`, header `X-API-Key`, pages `{data, nextToken}`.
   Reference: https://developer.ui.com/site-manager/ (rate limited: 10,000 requests per minute for a stable
   version of an API key).

@@ -17,7 +17,7 @@ from tranibor_lan_unifi.fake import AP_LOBBY, AP_ROOM_12, AP_ROOM_14, MISSING, S
 NOW = datetime(2026, 11, 25, 9, 17, tzinfo=UTC)
 TOKEN = "platform-token-for-tests"
 #: The Host the platform's Service gives the server: not localhost, and accepted.
-BASE = "http://unifi.choregos-plugins.svc:8080"
+BASE = "http://unifi.tranibor-plugins.svc:8080"
 MCP_HEADERS = {"Accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18"}
 
 

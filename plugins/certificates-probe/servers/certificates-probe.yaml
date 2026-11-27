@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: Apache-2.0
+# The live-endpoint server of the `certificates` profile, as the platform runs and governs it (ADR 0094,
+# ADR 0224). READ-ONLY: it opens a TLS connection to the hosts an administrator listed and writes nothing
+# anywhere. Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: certificates-probe
+# The profile this server serves (declared by the `certificates` plugin, which this plugin requires). The tools
+# below are the profile's, with its governance; the profile's conformance suite runs in ../server/tests.
+implements: [certificates/certificates@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/certificates-probe-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`. There is no secret: a handshake needs no credential.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [hosts]
+  properties:
+    hosts:
+      title: Hosts to probe
+      type: array
+      minItems: 1
+      items: {type: string}
+      description: >-
+        The hosts to probe over TLS, as host or host:port (443 by default), e.g. www.example.com,
+        mail.example.com:993 (joined with commas). Any other host is refused before a connection is made.
+      x-env: CERTIFICATES_PROBE_HOSTS
+      x-help: List every public name whose certificate matters, with its port when it is not 443 (mail, VPN, API gateways).
+      x-link: https://github.com/graalsystems/tranibor-agents/blob/main/plugins/certificates-probe/README.md#reaching-the-system
+
+# The hosts this server may reach are the ones the administrator typed: `from_fields` names `hosts`, whose
+# entries are host or host:port, not URLs. The server itself dials only those hosts, and the platform checks
+# each one against the organisation's network bounds (ADR 0224 section 6, README "Reaching the system").
+# Not confirmed: that the platform reads a bare host:port entry (it is documented for URLs).
+egress:
+  from_fields: [hosts]
+
+# Everything this server does is a read; none needs approval and none has an undo.
+operations:
+  - name: get_provider
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {}}
+    output_schema: {"$ref": "#/$defs/provider", "$defs": {"provider": {"type": "object", "required": ["instance", "provider", "kind", "scope"], "properties": {"instance": {"type": "string", "description": "The name of this instance (its connector's name in the platform)."}, "provider": {"type": "string", "description": "The source, e.g. a certificate manager's or a log's name."}, "kind": {"type": "string", "description": "What the instance looks at: \"endpoint\" (live TLS), \"manager\" (a certificate manager) or \"log\" (an issuance log)."}, "scope": {"type": "array", "items": {"type": "string"}, "description": "The hosts, namespaces or domains this instance is allowed to look at. Nothing else is ever named."}, "sees": {"type": "string", "description": "One sentence on what this source can and cannot tell."}}}}}
+  - name: list_certificates
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {"within_days": {"type": "integer", "description": "Keep the certificates expiring within this many days. Omitted keeps all."}, "name": {"type": "string", "description": "Keep the certificates that cover this name (a wildcard covers one label)."}, "limit": {"type": "integer", "description": "At most this many, 100 by default and 200 at most."}}}
+    output_schema: {"type": "object", "required": ["total", "truncated", "certificates"], "properties": {"total": {"type": "integer", "description": "How many match, before `limit`."}, "truncated": {"type": "boolean"}, "certificates": {"type": "array", "items": {"$ref": "#/$defs/certificate"}}, "unavailable": {"type": "array", "description": "Sources this instance could not read, each with the reason. An unreachable endpoint is one.", "items": {"$ref": "#/$defs/unavailable"}}}, "$defs": {"renewal": {"type": "object", "required": ["managed", "state"], "properties": {"managed": {"type": "boolean", "description": "True when this source knows a system that renews the certificate."}, "manager": {"type": "string", "description": "The system that renews it, when managed."}, "state": {"type": "string", "description": "ok, due (the renewal window is open and nothing renewed it), pending (an issuance is in progress), failing (it keeps failing), or unknown (this source cannot tell)."}, "detail": {"type": "string", "description": "Why, in the source's words, clipped."}, "next_renewal_at": {"type": "string"}}}, "certificate": {"type": "object", "required": ["id", "names", "issuer", "renewal"], "properties": {"id": {"type": "string"}, "names": {"type": "array", "items": {"type": "string"}}, "issuer": {"type": "string", "description": "Who issued it, as the source names the issuer."}, "subject": {"type": "string"}, "serial": {"type": "string"}, "not_before": {"type": "string"}, "not_after": {"type": "string", "description": "Left out while no certificate has been issued yet."}, "days_remaining": {"type": "integer", "description": "Whole days to not_after, negative once expired; left out with not_after."}, "expired": {"type": "boolean"}, "trusted": {"type": "boolean", "description": "Whether a client's root store trusts what is served. Only a source that connects knows it."}, "chain_complete": {"type": "boolean", "description": "Whether the chain served is complete. Only a source that connects knows it."}, "hostname_matches": {"type": "boolean", "description": "Whether the name asked for is covered. Only a source that connects knows it."}, "location": {"type": "string", "description": "Where it lives, e.g. host:port or a namespace and secret."}, "renewal": {"$ref": "#/$defs/renewal"}}}, "unavailable": {"type": "object", "required": ["id", "reason"], "properties": {"id": {"type": "string"}, "reason": {"type": "string"}}}}}
+  - name: get_certificate
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["id"], "properties": {"id": {"type": "string"}}}
+    output_schema: {"type": "object", "required": ["certificate"], "properties": {"certificate": {"$ref": "#/$defs/certificate"}, "renewal_attempts": {"type": "array", "items": {"$ref": "#/$defs/attempt"}}, "notes": {"type": "array", "items": {"type": "string"}}}, "$defs": {"renewal": {"type": "object", "required": ["managed", "state"], "properties": {"managed": {"type": "boolean", "description": "True when this source knows a system that renews the certificate."}, "manager": {"type": "string", "description": "The system that renews it, when managed."}, "state": {"type": "string", "description": "ok, due (the renewal window is open and nothing renewed it), pending (an issuance is in progress), failing (it keeps failing), or unknown (this source cannot tell)."}, "detail": {"type": "string", "description": "Why, in the source's words, clipped."}, "next_renewal_at": {"type": "string"}}}, "certificate": {"type": "object", "required": ["id", "names", "issuer", "renewal"], "properties": {"id": {"type": "string"}, "names": {"type": "array", "items": {"type": "string"}}, "issuer": {"type": "string", "description": "Who issued it, as the source names the issuer."}, "subject": {"type": "string"}, "serial": {"type": "string"}, "not_before": {"type": "string"}, "not_after": {"type": "string", "description": "Left out while no certificate has been issued yet."}, "days_remaining": {"type": "integer", "description": "Whole days to not_after, negative once expired; left out with not_after."}, "expired": {"type": "boolean"}, "trusted": {"type": "boolean", "description": "Whether a client's root store trusts what is served. Only a source that connects knows it."}, "chain_complete": {"type": "boolean", "description": "Whether the chain served is complete. Only a source that connects knows it."}, "hostname_matches": {"type": "boolean", "description": "Whether the name asked for is covered. Only a source that connects knows it."}, "location": {"type": "string", "description": "Where it lives, e.g. host:port or a namespace and secret."}, "renewal": {"$ref": "#/$defs/renewal"}}}, "attempt": {"type": "object", "required": ["kind", "name", "state"], "properties": {"kind": {"type": "string", "description": "What the step is, in the manager's words (a request, an order, a challenge, an issuer)."}, "name": {"type": "string"}, "state": {"type": "string"}, "detail": {"type": "string", "description": "The step's reason or message, clipped; data, never instructions."}, "signals": {"type": "array", "items": {"type": "string"}, "description": "Heuristic readings of `detail`, never a verdict."}}}}}
+  - name: list_findings
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {"within_days": {"type": "integer", "description": "The expiry window, 30 by default."}, "certificate": {"type": "string", "description": "Only the findings about this certificate id."}}}
+    output_schema: {"type": "object", "required": ["within_days", "total", "findings"], "properties": {"within_days": {"type": "integer"}, "total": {"type": "integer"}, "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}}, "$defs": {"finding": {"type": "object", "required": ["id", "kind", "severity", "certificate", "summary", "evidence"], "properties": {"id": {"type": "string"}, "kind": {"type": "string", "description": "expired, expires_soon, renewal_overdue, renewal_failing, not_issued, not_trusted, chain_incomplete, hostname_mismatch or unreachable."}, "severity": {"type": "string", "description": "critical, warning or info."}, "certificate": {"type": "string", "description": "The id of the certificate, or of the endpoint for unreachable."}, "summary": {"type": "string"}, "evidence": {"type": "array", "items": {"type": "string"}, "description": "The facts that support it, each short and from this source."}, "signals": {"type": "array", "items": {"type": "string"}}}}}}
+
+
+# The platform runs an eval instance of the image with exactly these variables (core #1372): the seeded
+# endpoints, no network, nothing of the configuration.
+fake:
+  env: {CERTIFICATES_PROBE_FAKE: "1"}
+  scenes: [default]

@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Certificate Transparency server of the `certificates` profile (ADR 0224): it serves
+# certificates/certificates@1 by searching a public log's index for the domains an administrator lists.
+# The agent, skill, template and evals live in the `certificates` plugin, which this one requires.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: certificates-ct
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Serve what the public CAs issued, to the `certificates` plugin's agent: for the domains an administrator
+    lists, the certificates logged in Certificate Transparency (names, issuer, dates), and findings for what
+    expires or has expired. It cannot tell what is served or what renews a certificate: the agent compares its
+    names with the other instances' to find what nobody manages. Read-only; only the search service is contacted.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # Profiles (`implements`) arrive with the core stories S86-01/S86-02; the first core release that carries
+  # them is not known yet, so this floor is a placeholder to be set to that release. The `certificates` plugin
+  # says the same.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: [{name: certificates, version: ">=0.1.0,<1.0.0"}]
+  connectors: {}
+contents:
+  procedures: ["procedures/*.md"]
+  servers: [servers/certificates-ct.yaml]

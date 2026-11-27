@@ -43,6 +43,27 @@ ships two (E3 and C1 of the tool-script matrix).
 | [`mcp-clients`](plugins/mcp-clients) | The external MCP clients: ChatGPT, Claude (claude.ai, Code, Desktop), Copilot in VS Code, Cursor |
 | [`requests`](plugins/requests) | The agents of the core's `default-request` workflow, for requests from any trade with no repository: `brief-writer` writes the brief a person approves, `assistant` produces the deliverable a person accepts |
 
+### Domain profiles and their providers
+
+An IT domain is split in two (ADR 0224 in the Tranibor repository). A **profile plugin** declares the
+domain's contract, a *profile* (`profiles/<domain>.yaml`: the tools, their access and their governance
+floor), and carries the generic agents, skills, templates, evals and a conformance suite. A **provider
+plugin** runs one MCP server that implements the profile for one product; the installer proves it does
+(same tools, same access, governance never weaker, compatible schemas). An agent names the profile, not a
+product: every instance the project may use serves it, so two providers (OVHcloud and GoDaddy), or two
+sites of one, answer the same agent. Each instance is configured in the console from the server's schema,
+secrets included.
+
+| Profile | Agents | Providers |
+|:--|:--|:--|
+| [`dns`](plugins/dns) | `dns-steward`: reads zones, plans a change that writes nothing, applies it under approval, publishes | [`dns-ovh`](plugins/dns-ovh), [`dns-godaddy`](plugins/dns-godaddy) |
+| [`identity`](plugins/identity) | `identity-steward` (dormant accounts, MFA, admins, group drift) and `joiner-leaver` (onboarding and offboarding, approved by the person's manager then IT) | [`identity-keycloak`](plugins/identity-keycloak) |
+| [`lan`](plugins/lan) | `lan-steward`: a site's devices, clients, ports and networks; restarts and PoE power cycles under approval | [`lan-unifi`](plugins/lan-unifi) (local, or through Ubiquiti's cloud connector) |
+| [`gitops`](plugins/gitops) | `gitops-steward`: why an application is out of sync or degraded, with its diff and history; sync, rollback and auto-sync pause under approval | [`gitops-argocd`](plugins/gitops-argocd) |
+| [`observability`](plugins/observability) | `alert-triage`: groups firing alerts, finds the likely cause with queries as evidence, proposes a silence (approved) or an escalation | [`observability-grafana`](plugins/observability-grafana) |
+| [`backup`](plugins/backup) | `backup-verifier`: every schedule has a recent good backup, locations are available; a restore test into an allowed target, under approval | [`backup-velero`](plugins/backup-velero) |
+| [`certificates`](plugins/certificates) | `cert-watch` (read-only): what expires or is broken soon, and names issued that no inventory knows | [`certificates-probe`](plugins/certificates-probe), [`certificates-cert-manager`](plugins/certificates-cert-manager), [`certificates-ct`](plugins/certificates-ct) |
+
 `software-delivery`, `netops`, `authoring` and `mcp-clients` are the core's built-in agent catalogue, moved here unchanged; see
 [MIGRATION-FROM-CORE.md](MIGRATION-FROM-CORE.md).
 

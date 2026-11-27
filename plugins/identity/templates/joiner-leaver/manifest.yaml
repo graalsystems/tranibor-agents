@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: joiner-leaver
+  version: 0.1.0
+  display: Identity · joiner and leaver
+  description: >-
+    A request to onboard or offboard a person becomes a work item. The joiner-leaver agent reads the role
+    catalogue and the directory and proposes the ordered writes (create, groups, setup mail; or disable, sign
+    out, ungroup); the person's manager approves the plan, IT identity decides each proposed action, and the
+    agent reads the directory back. Nothing is written to a directory, and nothing is deleted, before a person
+    approves it.
+requires:
+  connectors: {}
+defaults:
+  workflows: [./workflows/joiner-leaver.yaml]
+  default_workflow: joiner-leaver
+  policy: preset:solo
+  # The agent `joiner-leaver` and the skills `jml-checklist` and `role-catalogue` come with the plugin itself.
+  # The template names no connector: the directory's provider is whichever identity server plugin the
+  # organisation installed.
+inputs: []
+steps: []

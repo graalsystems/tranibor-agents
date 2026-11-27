@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# The `identity` plugin (ADR 0224): the identity profile (what any directory's server must serve), the two
+# provider-neutral agents `identity-steward` and `joiner-leaver`, their skills, the `identity-review` and
+# `joiner-leaver` templates and the evals. It brings no server: a provider plugin (`identity-keycloak`, ...)
+# brings one that `implements: [identity/identity@1]`.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: identity
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Review and change who has access, at any directory, under human approval: an agent audits dormant
+    accounts, accounts without a second factor, administrators and group drift and proposes governed changes;
+    a second agent turns a joiner or leaver request into the plan (create, group, setup mail; disable, sign
+    out, ungroup) that the right people approve. Neither names a provider: they work with whichever identity
+    server plugins the organisation installed.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # `contents.profiles` and `mcp_servers[].profile` arrive with the core stories S86-01/S86-02. The first core
+  # release that carries them is not known yet: this floor is a placeholder to set to that release.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: []
+  connectors: {}
+contents:
+  profiles: [profiles/identity.yaml]
+  agents: [agents/identity-steward.yaml, agents/joiner-leaver.yaml]
+  skills: [skills/identity-review, skills/jml-checklist, skills/role-catalogue]
+  templates: [templates/identity-review, templates/joiner-leaver]
+  evals: [evals/identity-steward.yaml, evals/joiner-leaver.yaml]

@@ -1,0 +1,147 @@
+# SPDX-License-Identifier: Apache-2.0
+# One person joining or leaving: request → plan (agent) → manager approves the plan → IT identity decides
+# the writes → resolve and read back (agent) → IT closes the manual tasks → done.
+#
+#   received ─ agent: plan ─▶ planned ─ manager ─▶ manager_ok ─ IT ─▶ approved ─ agent: resolve + read-back ─▶
+#   checked ─ IT closes the manual tasks ─▶ done
+#
+# - The request names the person, the date, the role, the manager and an APPROVER. The agent refuses, with no
+#   proposal, a request that names no approver or whose approver is the person; the manager and IT read why.
+# - The agent reads the directory and calls `plan_joiner` or `plan_leaver`; the writes it proposes are
+#   governed actions waiting in Approvals: nothing reaches the directory from the run itself. Create, add to
+#   a group, disable, sign out and setup mail always need a person (the profile's floor); removing from a
+#   group follows the project's policy.
+# - The MANAGER approves the plan first: a joiner or leaver request is approved by the person's manager, not
+#   only by IT. The platform cannot check that the approver is that manager from the group alone: the task says
+#   so and the report names the manager.
+# - After the writes are decided, the agent resolves the account (the id the directory gives the username) and
+#   reads the directory back, line by line, against the plan. A write that was refused shows as not done.
+# - Nothing is deleted anywhere: the profile has no delete.
+# - Dates: every write is applied no earlier than `effective_date`; IT approves on or after it.
+# - The wave-1 plugin ran a child workflow per write, each calling a named connector. A template cannot name a
+#   connector here (the provider is whichever instance the organisation connected), so the same phases are kept
+#   in ONE workflow and the writes are the agent's governed proposals. The two phases of the agent are told apart
+#   by the work item's state, as in wave-1.
+apiVersion: choregos/v1
+kind: Workflow
+metadata:
+  name: joiner-leaver
+  version: 2
+  description: A joiner or a leaver, planned by an agent, approved by the manager, decided by IT identity through approvals, read back by the agent, and closed by IT.
+  inputs:
+    type: object
+    required: [directory, kind, username, effective_date, approver]
+    properties:
+      directory: { type: string, title: Directory, minLength: 1, maxLength: 200, description: The directory to change (the name the identity server lists) }
+      kind: { type: string, title: Joiner or leaver, enum: [joiner, leaver] }
+      full_name: { type: string, title: Full name, minLength: 1, maxLength: 200 }
+      username: { type: string, title: Account (username), minLength: 1, maxLength: 120, pattern: "^[A-Za-z0-9._@+-]+$" }
+      email: { type: string, title: E-mail, maxLength: 200 }
+      effective_date: { type: string, format: date, title: Start date or last day }
+      role: { type: string, title: Role (joiner), maxLength: 120 }
+      team: { type: string, title: Team, maxLength: 120 }
+      manager: { type: string, title: Manager (username or e-mail), maxLength: 200 }
+      approver: { type: string, title: Approver who authorised the request (name and e-mail), maxLength: 200 }
+      requester: { type: string, title: Requested by, maxLength: 200 }
+      notes: { type: string, title: Anything else, maxLength: 2000 }
+initial: received
+actors:
+  agent: { type: agent, role: plan, agent: joiner-leaver, model: "profile:standard", max_turns: 25, max_minutes: 10 }
+  manager: { type: human, group: jml-managers, sla_hours: 24 }
+  it_identity: { type: human, group: it-identity, sla_hours: 24 }
+states:
+  received: { display: Request received, kind: wait }
+  planned: { display: Plan to approve (manager), kind: wait }
+  manager_ok: { display: Plan to decide (IT), kind: wait }
+  approved: { display: Writes decided, kind: wait }
+  checked: { display: Read-back done, kind: wait }
+  done: { display: Done, terminal: true }
+  needs_human: { display: Needs a human, kind: wait }
+  declined: { display: Declined, terminal: true, outcome: cancelled }
+  abandoned: { display: Dropped, terminal: true, outcome: cancelled }
+transitions:
+  - id: t-plan
+    from: received
+    to: planned
+    by: agent
+    outputs: [joiner_leaver_markdown]
+    output_types: { joiner_leaver_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: received, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-manager
+    from: planned
+    to: manager_ok
+    by: manager
+    task:
+      title: Approve the request and its plan
+      instructions: >-
+        Approve only if you are the manager of this person and the request is right: the person, the date,
+        the role. Read the plan and the manual tasks. A plan the agent refused has no action: read why.
+        Reject to decline the request.
+      form:
+        type: object
+        required: [manager]
+        properties:
+          manager: { type: string, title: Your name and e-mail }
+      attest: I am this person's manager and I approve this request
+    timeout_hours: 336
+    on_reject: declined
+
+  - id: t-decide
+    from: manager_ok
+    to: approved
+    by: it_identity
+    task:
+      title: Decide the proposed writes
+      instructions: >-
+        Decide each proposed action in Approvals, no earlier than the effective date, in the order of the plan.
+        Confirm below when you have decided them all. Reject to decline the request.
+      form:
+        type: object
+        required: [decided]
+        properties:
+          decided: { type: string, title: Which actions were approved and which refused }
+      attest: I decided the actions of this plan
+    timeout_hours: 336
+    on_reject: declined
+
+  - id: t-readback
+    from: approved
+    to: checked
+    by: agent
+    outputs: [joiner_leaver_readback_markdown]
+    output_types: { joiner_leaver_readback_markdown: markdown }
+    gates: [outputs_present]
+    on_fail: { to: approved, max_attempts: 2, escalate_to: needs_human }
+
+  - id: t-close
+    from: checked
+    to: done
+    by: it_identity
+    task:
+      title: Read the read-back and close the manual tasks
+      instructions: >-
+        Read the read-back: an action refused or never decided shows as not done. Do the manual tasks by hand
+        and say below what was done and what was not. Reject to send the request back to the read-back.
+      form:
+        type: object
+        required: [outcome]
+        properties:
+          outcome: { type: string, title: What was done by hand and what was not, minLength: 1, maxLength: 2000 }
+      attest: I read the read-back and closed what a person must do
+    on_reject: approved
+
+  - id: t-abandon
+    from: needs_human
+    to: abandoned
+    by: it_identity
+    timeout_hours: 168
+defaults:
+  from_any_agent_state:
+    on_question: needs_human
+    on_budget_exceeded: needs_human
+    on_timeout: needs_human
+  needs_human:
+    on_answer: resume
+    on_abandon: abandoned

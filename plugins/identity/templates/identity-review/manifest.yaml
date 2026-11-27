@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: choregos/v1
+kind: Template
+metadata:
+  name: identity-review
+  version: 0.1.0
+  display: Identity · access review
+  description: >-
+    A request to review a directory's access becomes a work item. The identity steward finds the instance that
+    serves the directory, reads it and writes a report of dormant accounts, accounts without a second factor,
+    administrators and group drift, with the changes it proposes; the directory owner reviews and decides each
+    proposed action. Nothing is written to a directory before a person approves it.
+requires:
+  connectors: {}
+defaults:
+  workflows: [./workflows/identity-review.yaml]
+  default_workflow: identity-review
+  policy: preset:solo
+  # The agent `identity-steward` and the skill `identity-review` come with the plugin itself. The template names
+  # no connector: the directory's provider is whichever identity server plugin the organisation installed, and
+  # the agent finds the instance that serves the directory.
+inputs: []
+steps: []

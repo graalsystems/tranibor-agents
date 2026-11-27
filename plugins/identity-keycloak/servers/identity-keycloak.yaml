@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Keycloak server of the `identity` profile, as the platform runs and governs it (ADR 0094, ADR 0224).
+# Source: ../server. A tool not listed in `operations` is refused by the platform.
+name: identity-keycloak
+# The profile this server serves (declared by the `identity` plugin, which this plugin requires). The tools
+# below are the profile's, with at least its governance, plus two Keycloak-only reads (list_clients,
+# get_realm_summary); the profile's conformance suite runs in ../server/tests.
+implements: [identity/identity@1]
+# CI fills the digest when it builds, signs and publishes the image; the zeros are never pullable.
+image: ghcr.io/graalsystems/tranibor-agents/identity-keycloak-mcp@sha256:0000000000000000000000000000000000000000000000000000000000000000
+port: 8080
+protocol: mcp-http
+# MCP at /mcp, behind the platform's bearer token (TRANIBOR_SERVER_TOKEN); the health probe stays open.
+paths: {mcp: /mcp, health: /healthz}
+
+# What an administrator types when installing the plugin. Each property reaches the server as the
+# environment variable named in `x-env`; `secret_fields` are sealed and never shown again.
+config_schema:
+  type: object
+  additionalProperties: false
+  required: [base_url, realms, client_id, client_secret]
+  properties:
+    base_url:
+      type: string
+      format: uri
+      pattern: "^https://"
+      title: Keycloak URL
+      description: The Keycloak server URL, without /admin and without a trailing slash, e.g. https://sso.example.com. Keycloak 17 and later serves no /auth prefix; write it here if yours still does.
+      x-env: KEYCLOAK_BASE_URL
+      x-help: The address people use to sign in, without the realm and without /admin. It must be reachable from the platform (see the README, "Reaching the system").
+      x-link: https://www.keycloak.org/docs/latest/server_admin/
+    realms:
+      type: array
+      minItems: 1
+      items: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+      title: Realms
+      description: >-
+        The realms (the profile's "directories") this server may touch, by name, not display name, e.g. staff
+        (joined with commas). Any other realm is refused, even to read, whatever the service account allows.
+      x-env: KEYCLOAK_REALMS
+      x-help: Only these realms are ever reachable through this connector. The service account needs its roles in each of them.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#configuring-realms
+    client_id:
+      type: string
+      minLength: 1
+      title: Client ID
+      description: The clientId of the confidential client whose service account the connector uses (see the procedure).
+      x-env: KEYCLOAK_CLIENT_ID
+      x-help: The Client ID you chose when creating the client, for example tranibor-iam.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#_service_accounts
+    client_secret:
+      type: string
+      minLength: 1
+      title: Client secret
+      description: That client's secret (Credentials tab).
+      x-env: KEYCLOAK_CLIENT_SECRET
+      x-help: Clients, your client, Credentials tab, Client secret. Typed once; it is sealed afterwards.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#_service_accounts
+    token_realm:
+      type: string
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+      title: Token realm
+      description: The realm the client lives in, when it is not the first listed realm (typically master). Empty means the first listed realm.
+      x-env: KEYCLOAK_TOKEN_REALM
+      x-help: Leave empty when the client was created in the first realm of the list. A client that administers several realms usually lives in master.
+      x-link: https://www.keycloak.org/docs/latest/server_admin/#_service_accounts
+secret_fields: [client_secret]
+
+# The only host the server may reach: the Keycloak server.
+egress:
+  from_fields: [base_url]
+
+# The governance floor of the profile, kept or raised. `access: read` is allowed by default; a write goes
+# through approval unless an administrator decides otherwise; `human_approval: true` is never lowered.
+# `compensation` is the operation that undoes the write, its arguments rendered from the write's own result.
+# `platform_arguments: [action_key]` is an idempotency key the platform fills, never the agent.
+# No tool deletes a user, reads a credential, impersonates, changes realm settings or touches a client's
+# secret: none exists, and the service account is not asked for the roles that would allow it.
+operations:
+  - name: get_provider
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "properties": {}}
+    output_schema: {"$ref": "#/$defs/provider", "$defs": {"provider": {"type": "object", "required": ["instance", "provider", "directories"], "properties": {"instance": {"type": "string", "description": "The name of this instance of the server (its connector name)."}, "provider": {"type": "string", "description": "The provider, e.g. keycloak."}, "directories": {"type": "array", "items": {"type": "string"}, "description": "The directories this instance may touch (its allow-list)."}}}}}
+  - name: get_directory
+    access: read
+    input_schema: {"$ref": "#/$defs/directory_only", "$defs": {"directory_only": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}}}}}
+    output_schema: {"type": "object", "required": ["directory", "enabled", "sign_in_events_enabled", "admin_events_enabled"], "properties": {"directory": {"type": "string"}, "display_name": {"type": "string"}, "enabled": {"type": "boolean"}, "sign_in_events_enabled": {"type": "boolean"}, "admin_events_enabled": {"type": "boolean"}, "events_retention_days": {"type": "number", "description": "How long events are kept; absent when the provider does not say."}, "mail_configured": {"type": "boolean", "description": "True when the directory can send mail (see send_setup_email)."}, "user_count": {"type": "integer"}}}
+  - name: find_users
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "search": {"type": "string", "description": "Matches username, email, first and last name."}, "username": {"type": "string"}, "email": {"type": "string"}, "exact": {"type": "boolean", "description": "With username or email, an exact match instead of a substring."}, "enabled": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}}
+    output_schema: {"type": "object", "required": ["directory", "users", "count", "has_more"], "properties": {"directory": {"type": "string"}, "users": {"type": "array", "items": {"$ref": "#/$defs/user"}}, "count": {"type": "integer"}, "has_more": {"type": "boolean"}}, "$defs": {"user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "email_verified": {"type": "boolean"}, "created_at": {"type": "string"}, "setup_actions": {"type": "array", "items": {"type": "string"}}}}}}
+  - name: get_user
+    access: read
+    input_schema: {"$ref": "#/$defs/user_ref", "$defs": {"user_ref": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string", "description": "The provider's id for the user. Give exactly one of user_id and username."}, "username": {"type": "string", "description": "The exact username. Give exactly one of user_id and username."}}}}}
+    output_schema: {"type": "object", "required": ["directory", "user"], "properties": {"directory": {"type": "string"}, "user": {"$ref": "#/$defs/user"}, "mfa_methods": {"type": "array", "items": {"type": "string"}, "description": "Kinds of second factor enrolled, e.g. otp, webauthn; empty when none. Absent when the provider could not say."}}, "$defs": {"user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "email_verified": {"type": "boolean"}, "created_at": {"type": "string"}, "setup_actions": {"type": "array", "items": {"type": "string"}}}}}}
+  - name: list_user_groups
+    access: read
+    input_schema: {"$ref": "#/$defs/user_ref", "$defs": {"user_ref": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string", "description": "The provider's id for the user. Give exactly one of user_id and username."}, "username": {"type": "string", "description": "The exact username. Give exactly one of user_id and username."}}}}}
+    output_schema: {"type": "object", "required": ["directory", "user_id", "groups", "count"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "groups": {"type": "array", "items": {"$ref": "#/$defs/group"}}, "count": {"type": "integer"}}, "$defs": {"group": {"type": "object", "required": ["id", "path"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "path": {"type": "string"}, "member_count": {"type": "integer"}, "member_count_is_a_floor": {"type": "boolean"}}}}}
+  - name: list_groups
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "search": {"type": "string", "description": "Keeps the groups whose path contains the text."}, "with_member_counts": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}}
+    output_schema: {"type": "object", "required": ["directory", "groups", "count", "truncated"], "properties": {"directory": {"type": "string"}, "groups": {"type": "array", "items": {"$ref": "#/$defs/group"}}, "count": {"type": "integer"}, "truncated": {"type": "boolean"}}, "$defs": {"group": {"type": "object", "required": ["id", "path"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "path": {"type": "string"}, "member_count": {"type": "integer"}, "member_count_is_a_floor": {"type": "boolean"}}}}}
+  - name: get_group_members
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory", "group_id"], "properties": {"directory": {"type": "string"}, "group_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}}
+    output_schema: {"type": "object", "required": ["directory", "group", "members", "count", "has_more"], "properties": {"directory": {"type": "string"}, "group": {"$ref": "#/$defs/group"}, "members": {"type": "array", "items": {"$ref": "#/$defs/user"}}, "count": {"type": "integer"}, "has_more": {"type": "boolean"}}, "$defs": {"user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "email_verified": {"type": "boolean"}, "created_at": {"type": "string"}, "setup_actions": {"type": "array", "items": {"type": "string"}}}}, "group": {"type": "object", "required": ["id", "path"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "path": {"type": "string"}, "member_count": {"type": "integer"}, "member_count_is_a_floor": {"type": "boolean"}}}}}
+  - name: compare_group_members
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory", "group_id", "expected_usernames"], "properties": {"directory": {"type": "string"}, "group_id": {"type": "string"}, "expected_usernames": {"type": "array", "items": {"type": "string"}}}}
+    output_schema: {"type": "object", "required": ["directory", "group", "missing", "unexpected", "matched", "complete"], "properties": {"directory": {"type": "string"}, "group": {"$ref": "#/$defs/group"}, "missing": {"type": "array", "items": {"type": "string"}, "description": "Expected usernames that are not members."}, "unexpected": {"type": "array", "items": {"$ref": "#/$defs/user"}, "description": "Members that are not expected."}, "matched": {"type": "integer"}, "complete": {"type": "boolean", "description": "False when the member list was cut; then `unexpected` may be incomplete."}}, "$defs": {"user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "email_verified": {"type": "boolean"}, "created_at": {"type": "string"}, "setup_actions": {"type": "array", "items": {"type": "string"}}}}, "group": {"type": "object", "required": ["id", "path"], "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "path": {"type": "string"}, "member_count": {"type": "integer"}, "member_count_is_a_floor": {"type": "boolean"}}}}}
+  - name: list_user_sessions
+    access: read
+    input_schema: {"$ref": "#/$defs/user_ref", "$defs": {"user_ref": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string", "description": "The provider's id for the user. Give exactly one of user_id and username."}, "username": {"type": "string", "description": "The exact username. Give exactly one of user_id and username."}}}}}
+    output_schema: {"type": "object", "required": ["directory", "user_id", "sessions", "count"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "sessions": {"type": "array", "items": {"$ref": "#/$defs/session"}}, "count": {"type": "integer"}}, "$defs": {"session": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}, "started_at": {"type": "string"}, "last_access_at": {"type": "string"}, "ip_address": {"type": "string"}, "remember_me": {"type": "boolean"}, "applications": {"type": "array", "items": {"type": "string"}}}}}}
+  - name: list_privileged_users
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}}}
+    output_schema: {"type": "object", "required": ["directory", "users", "count", "scope", "complete"], "properties": {"directory": {"type": "string"}, "users": {"type": "array", "items": {"$ref": "#/$defs/privileged_user"}}, "count": {"type": "integer"}, "scope": {"type": "string", "description": "What was read and what was not (for example composite or inherited grants)."}, "complete": {"type": "boolean"}}, "$defs": {"privileged_user": {"type": "object", "required": ["id", "username", "enabled", "grants"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "grants": {"type": "array", "items": {"$ref": "#/$defs/grant"}}}}, "grant": {"type": "object", "required": ["privilege", "via"], "properties": {"privilege": {"type": "string"}, "via": {"type": "string", "description": "\"direct\", or \"group:<path>\" when a group gives it."}}}}}
+  - name: dormant_users
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "days": {"type": "integer", "minimum": 1, "maximum": 3650}, "include_never_signed_in": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}}
+    output_schema: {"type": "object", "required": ["directory", "reliable", "evidence", "dormant", "count"], "properties": {"directory": {"type": "string"}, "reliable": {"type": "boolean"}, "reason": {"type": "string"}, "evidence": {"type": "object"}, "dormant": {"type": "array", "items": {"$ref": "#/$defs/dormant_user"}}, "count": {"type": "integer"}}, "$defs": {"dormant_user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "created_at": {"type": "string"}, "last_sign_in_at": {"type": "string"}, "days_since_last_sign_in": {"type": "integer"}, "note": {"type": "string"}}}}}
+  - name: users_without_mfa
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "max_users": {"type": "integer", "minimum": 1, "maximum": 2000}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}}
+    output_schema: {"type": "object", "required": ["directory", "users", "count", "total_without_mfa", "users_examined", "truncated"], "properties": {"directory": {"type": "string"}, "users": {"type": "array", "items": {"$ref": "#/$defs/user"}}, "count": {"type": "integer"}, "total_without_mfa": {"type": "integer"}, "users_examined": {"type": "integer"}, "truncated": {"type": "boolean"}}, "$defs": {"user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "email_verified": {"type": "boolean"}, "created_at": {"type": "string"}, "setup_actions": {"type": "array", "items": {"type": "string"}}}}}}
+  - name: users_without_group
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "max_users": {"type": "integer", "minimum": 1, "maximum": 2000}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}}
+    output_schema: {"type": "object", "required": ["directory", "users", "count", "total_without_group", "users_examined", "truncated"], "properties": {"directory": {"type": "string"}, "users": {"type": "array", "items": {"$ref": "#/$defs/user"}}, "count": {"type": "integer"}, "total_without_group": {"type": "integer"}, "users_examined": {"type": "integer"}, "truncated": {"type": "boolean"}}, "$defs": {"user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "email_verified": {"type": "boolean"}, "created_at": {"type": "string"}, "setup_actions": {"type": "array", "items": {"type": "string"}}}}}}
+  - name: list_sign_in_events
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "types": {"type": "array", "items": {"type": "string"}, "description": "Event types in the provider's words; the default is successful sign-ins."}, "user_id": {"type": "string"}, "date_from": {"type": "string", "format": "date"}, "date_to": {"type": "string", "format": "date"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "offset": {"type": "integer", "minimum": 0}}}
+    output_schema: {"type": "object", "required": ["directory", "events_enabled", "events", "count", "has_more"], "properties": {"directory": {"type": "string"}, "events_enabled": {"type": "boolean"}, "events": {"type": "array", "items": {"$ref": "#/$defs/sign_in_event"}}, "count": {"type": "integer"}, "has_more": {"type": "boolean"}, "note": {"type": "string"}}, "$defs": {"sign_in_event": {"type": "object", "required": ["type"], "properties": {"time": {"type": "string"}, "type": {"type": "string"}, "user_id": {"type": "string"}, "application": {"type": "string"}, "ip_address": {"type": "string"}, "error": {"type": "string"}}}}}
+  - name: list_admin_events
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "operations": {"type": "array", "items": {"type": "string"}, "description": "In the provider's words, e.g. CREATE, UPDATE, DELETE, ACTION."}, "resource_types": {"type": "array", "items": {"type": "string"}}, "actor_id": {"type": "string", "description": "The administrator who did it."}, "resource_path": {"type": "string"}, "date_from": {"type": "string", "format": "date"}, "date_to": {"type": "string", "format": "date"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "offset": {"type": "integer", "minimum": 0}}}
+    output_schema: {"type": "object", "required": ["directory", "admin_events_enabled", "events", "count", "has_more"], "properties": {"directory": {"type": "string"}, "admin_events_enabled": {"type": "boolean"}, "events": {"type": "array", "items": {"$ref": "#/$defs/admin_event"}}, "count": {"type": "integer"}, "has_more": {"type": "boolean"}, "note": {"type": "string"}}, "$defs": {"admin_event": {"type": "object", "properties": {"time": {"type": "string"}, "operation": {"type": "string"}, "resource_type": {"type": "string"}, "resource_path": {"type": "string"}, "error": {"type": "string"}, "actor_id": {"type": "string"}, "actor_ip_address": {"type": "string"}, "representation_present": {"type": "boolean"}}}}}
+  - name: plan_joiner
+    access: read
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory", "username", "email", "first_name", "last_name"], "properties": {"directory": {"type": "string"}, "username": {"type": "string"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "group_ids": {"type": "array", "items": {"type": "string"}, "description": "The groups the person gets, by id (read them with list_groups)."}, "setup_actions": {"type": "array", "items": {"$ref": "#/$defs/setup_action"}}}, "$defs": {"setup_action": {"type": "string", "enum": ["set_password", "enroll_mfa", "enroll_passkey", "verify_email", "update_profile"]}}}
+    output_schema: {"$ref": "#/$defs/plan", "$defs": {"proposed_call": {"type": "object", "required": ["tool", "arguments"], "properties": {"tool": {"type": "string"}, "arguments": {"type": "object"}, "reason": {"type": "string"}}}, "plan": {"type": "object", "required": ["directory", "valid", "errors", "warnings", "proposed_calls"], "properties": {"directory": {"type": "string"}, "valid": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "state": {"type": "object", "description": "What was read about the account before planning."}, "proposed_calls": {"type": "array", "items": {"$ref": "#/$defs/proposed_call"}}}}}}
+  - name: plan_leaver
+    access: read
+    input_schema: {"$ref": "#/$defs/user_ref", "$defs": {"user_ref": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string", "description": "The provider's id for the user. Give exactly one of user_id and username."}, "username": {"type": "string", "description": "The exact username. Give exactly one of user_id and username."}}}}}
+    output_schema: {"$ref": "#/$defs/plan", "$defs": {"proposed_call": {"type": "object", "required": ["tool", "arguments"], "properties": {"tool": {"type": "string"}, "arguments": {"type": "object"}, "reason": {"type": "string"}}}, "plan": {"type": "object", "required": ["directory", "valid", "errors", "warnings", "proposed_calls"], "properties": {"directory": {"type": "string"}, "valid": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "state": {"type": "object", "description": "What was read about the account before planning."}, "proposed_calls": {"type": "array", "items": {"$ref": "#/$defs/proposed_call"}}}}}}
+  # Keycloak only: not in the profile.
+  - {name: list_clients, access: read}
+  - {name: get_realm_summary, access: read}
+
+  - name: create_user
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory", "username"], "properties": {"directory": {"type": "string"}, "username": {"type": "string"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "enabled": {"type": "boolean"}, "setup_actions": {"type": "array", "items": {"$ref": "#/$defs/setup_action"}}}, "$defs": {"setup_action": {"type": "string", "enum": ["set_password", "enroll_mfa", "enroll_passkey", "verify_email", "update_profile"]}}}
+    output_schema: {"type": "object", "required": ["directory", "created", "user"], "properties": {"directory": {"type": "string"}, "created": {"type": "boolean"}, "user": {"$ref": "#/$defs/user"}, "note": {"type": "string"}}, "$defs": {"user": {"type": "object", "required": ["id", "username", "enabled"], "properties": {"id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "email": {"type": "string"}, "first_name": {"type": "string"}, "last_name": {"type": "string"}, "email_verified": {"type": "boolean"}, "created_at": {"type": "string"}, "setup_actions": {"type": "array", "items": {"type": "string"}}}}}}
+    access: write
+    human_approval: true
+    description: A user without a password, idempotent on username (an existing user is returned unchanged) and through the platform's action_key.
+    platform_arguments: [action_key]
+  - name: add_user_to_group
+    input_schema: {"$ref": "#/$defs/membership", "$defs": {"membership": {"type": "object", "additionalProperties": false, "required": ["directory", "group_id"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "group_id": {"type": "string"}}}}}
+    output_schema: {"$ref": "#/$defs/membership_result", "$defs": {"membership_result": {"type": "object", "required": ["directory", "user_id", "group_id", "was_member", "changed"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "group_id": {"type": "string"}, "group_path": {"type": "string"}, "was_member": {"type": "boolean"}, "changed": {"type": "boolean", "description": "True when this call changed the membership; undo it only then."}}}}}
+    access: write
+    human_approval: true
+    description: A group membership, idempotent; it grants access (a group can be privileged), so a person approves it. Undone by removing it (check `changed`; a no-op add must not be undone).
+    compensation:
+      operation: remove_user_from_group
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+        group_id: "{{ result.group_id }}"
+  - name: remove_user_from_group
+    input_schema: {"$ref": "#/$defs/membership", "$defs": {"membership": {"type": "object", "additionalProperties": false, "required": ["directory", "group_id"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "group_id": {"type": "string"}}}}}
+    output_schema: {"$ref": "#/$defs/membership_result", "$defs": {"membership_result": {"type": "object", "required": ["directory", "user_id", "group_id", "was_member", "changed"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "group_id": {"type": "string"}, "group_path": {"type": "string"}, "was_member": {"type": "boolean"}, "changed": {"type": "boolean", "description": "True when this call changed the membership; undo it only then."}}}}}
+    access: write
+    description: A group membership removed, idempotent. Undone by adding it back.
+    compensation:
+      operation: add_user_to_group
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+        group_id: "{{ result.group_id }}"
+  - name: disable_user
+    input_schema: {"$ref": "#/$defs/user_ref", "$defs": {"user_ref": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string", "description": "The provider's id for the user. Give exactly one of user_id and username."}, "username": {"type": "string", "description": "The exact username. Give exactly one of user_id and username."}}}}}
+    output_schema: {"$ref": "#/$defs/enabled_result", "$defs": {"enabled_result": {"type": "object", "required": ["directory", "user_id", "enabled", "previous_enabled", "changed"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "previous_enabled": {"type": "boolean"}, "changed": {"type": "boolean"}}}}}
+    access: write
+    human_approval: true
+    description: Disables an account (never deletes it). Undone by enabling it.
+    compensation:
+      operation: enable_user
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+  - name: enable_user
+    input_schema: {"$ref": "#/$defs/user_ref", "$defs": {"user_ref": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string", "description": "The provider's id for the user. Give exactly one of user_id and username."}, "username": {"type": "string", "description": "The exact username. Give exactly one of user_id and username."}}}}}
+    output_schema: {"$ref": "#/$defs/enabled_result", "$defs": {"enabled_result": {"type": "object", "required": ["directory", "user_id", "enabled", "previous_enabled", "changed"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "enabled": {"type": "boolean"}, "previous_enabled": {"type": "boolean"}, "changed": {"type": "boolean"}}}}}
+    access: write
+    human_approval: true
+    description: Re-enables an account. Undone by disabling it.
+    compensation:
+      operation: disable_user
+      arguments:
+        directory: "{{ result.directory }}"
+        user_id: "{{ result.user_id }}"
+  - name: logout_user
+    input_schema: {"$ref": "#/$defs/user_ref", "$defs": {"user_ref": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string", "description": "The provider's id for the user. Give exactly one of user_id and username."}, "username": {"type": "string", "description": "The exact username. Give exactly one of user_id and username."}}}}}
+    output_schema: {"type": "object", "required": ["directory", "user_id", "sessions_revoked"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "sessions_revoked": {"type": "integer"}}}
+    access: write
+    human_approval: true
+    description: Ends all of a user's sessions. Not undoable (the user signs in again).
+  - name: send_setup_email
+    input_schema: {"type": "object", "additionalProperties": false, "required": ["directory", "actions"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "actions": {"type": "array", "description": "At least one action; an empty list is refused. The profile subset has no minItems.", "items": {"$ref": "#/$defs/setup_action"}}, "lifespan_seconds": {"type": "integer", "minimum": 60, "maximum": 2592000, "description": "How long the link lives."}}, "$defs": {"setup_action": {"type": "string", "enum": ["set_password", "enroll_mfa", "enroll_passkey", "verify_email", "update_profile"]}}}
+    output_schema: {"type": "object", "required": ["directory", "user_id", "actions", "sent"], "properties": {"directory": {"type": "string"}, "user_id": {"type": "string"}, "username": {"type": "string"}, "email": {"type": "string"}, "actions": {"type": "array", "items": {"type": "string"}}, "lifespan_seconds": {"type": "integer"}, "sent": {"type": "boolean"}, "deduplicated": {"type": "boolean"}}}
+    access: write
+    human_approval: true
+    description: Emails the user a link to complete setup actions (set a password, enroll a second factor, verify the address), idempotent through the platform's action_key.
+    platform_arguments: [action_key]
+
+# How the platform runs this server on its fake for the eval matrix (core #1372): the variable that
+# switches it to its seeded in-memory realms (server/src/tranibor_identity_keycloak/config.py), which no
+# configuration field reaches, and the one scene they serve. The platform adds its own token
+# (TRANIBOR_SERVER_TOKEN) and nothing of the configuration.
+fake:
+  env: {KEYCLOAK_FAKE: "1"}
+  scenes: [default]

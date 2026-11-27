@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# The Keycloak server of the `identity` profile (ADR 0224): it serves identity/identity@1 for Keycloak realms
+# (Admin REST API), and the procedure an administrator follows to create the service account it uses.
+# The agents, skills, templates and evals live in the `identity` plugin, which this one requires.
+apiVersion: choregos/v1
+kind: Plugin
+metadata:
+  name: identity-keycloak
+  version: 0.1.0
+  publisher: GRAAL.SYSTEMS SAS
+  license: Apache-2.0
+  description: >-
+    Serve Keycloak realms to the `identity` plugin's agents: reads of users, groups, sessions, second factors,
+    administrators and events, plans that write nothing, and a few governed writes (create a user, group
+    membership, disable and enable, end sessions, email setup actions). Only the realms an administrator
+    lists are reachable, even to read. Never deletes a user, reads a credential or touches a client secret.
+  homepage: https://github.com/graalsystems/tranibor-agents
+  # Profiles (`implements`) arrive with the core stories S86-01/S86-02; the first core release that carries
+  # them is not known yet, so this floor is a placeholder to be set to that release. The `identity` plugin says
+  # the same.
+  core: ">=0.30.0,<1.0.0"
+requires:
+  plugins: [{name: identity, version: ">=0.1.0,<1.0.0"}]
+  connectors: {}
+contents:
+  procedures: ["procedures/*.md"]
+  servers: [servers/identity-keycloak.yaml]

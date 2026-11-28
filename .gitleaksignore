@@ -6,3 +6,7 @@
 
 # The same invented Odoo key, as the commit that squashed the PA-06 work into main carries it (2ab4116, 2026-11-21).
 2ab4116c53df382aa085e12bd4c7595e54616b75:plugins/procurement/server/tests/odoo_script.py:generic-api-key:24
+
+# The same invented Odoo key under the commit id main carries since the history was rewritten (b2663a5, the
+# move to graalsystems): the line, the file and the key are those of 2ab4116.
+b2663a552240c9e2ebfc8e531c941830f8eea043:plugins/procurement/server/tests/odoo_script.py:generic-api-key:24
